@@ -1,0 +1,12 @@
+{
+  "format":"daymark-workspace","schemaVersion":1,"exportedAt":"2026-11-24T12:00:00Z",
+  "payload":{
+    "version":1,"revision":4,"sample":false,"preferences":{"theme":"system","showRoutines":true,"showTomorrow":true},
+    "days":{"2026-11-24":{"zone":"Asia/Kolkata","budget":60,"rest":false}},
+    "goals":[{"id":"course","title":"Publish a useful course lesson","why":"A reader can use the exercise","date":"","archived":false,"createdAt":"2026-11-23T12:00:00Z","milestones":[{"id":"outline","title":"Finish the lesson outline","week":"2026-11-23","done":false,"completedAt":null,"completedDay":""}]}],
+    "tasks":[{"id":"draft","title":"Draft three sections","firstStep":"Open the lesson document","definition":"Three headings with three bullets each","cue":"After breakfast, at my desk","fallback":"Write one heading","preparation":"Leave the document open","date":"2026-11-24","time":"","estimate":30,"goalId":"course","milestoneId":"outline","status":"partial","completedAt":null,"completedDay":"","createdAt":"2026-11-23T12:01:00Z","updatedAt":"2026-11-24T04:00:00Z","priority":true,"moves":0,"unplanned":false,"archived":false}],
+    "activities":[{"id":"heading","entityId":"draft","kind":"partial","label":"Draft three sections","detail":"Interrupted after one heading","goalId":"course","day":"2026-11-24","zone":"Asia/Kolkata","at":"2026-11-24T04:00:00Z"},{"id":"editing","entityId":"unexpected-edit","kind":"unexpected work","label":"Edited the introduction","goalId":"course","day":"2026-11-24","zone":"Asia/Kolkata","minutes":15,"at":"2026-11-24T10:00:00Z"}],
+    "notes":[{"id":"lesson","kind":"lesson","body":"Writing one heading helped me restart.","day":"2026-11-24","goalId":"course","createdAt":"2026-11-24T12:00:00Z","updatedAt":"2026-11-24T12:00:00Z","convertedTaskId":""}],
+    "routines":[],"logs":[],"sessions":[],"focus":null
+  }
+}
