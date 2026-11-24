@@ -8,6 +8,20 @@ export function dayKey(value = new Date()) {
 export function addDays(day, count) { const d = new Date(day + 'T12:00:00'); d.setDate(d.getDate()+count); return dayKey(d); }
 export function weekStart(day) { const d = new Date(day+'T12:00:00'); return addDays(day, -(d.getDay()+6)%7); }
 export function isDay(s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s+'T12:00:00')) && dayKey(s+'T12:00:00') === s; }
+export function firstStepFor(title) {
+  const call = /^\s*(?:call|phone|ring)\s+(.+?)(?:\s+(?:about|regarding|to discuss)\s+.*|[.!?]*)$/i.exec(title);
+  if (call) return 'Open the contact details for '+call[1]+'.';
+  const steps = [
+    [/\b(slides?|presentation|deck)\b/i,'Write the takeaway for slide one.'],
+    [/\b(email|reply|message)\b/i,'Draft the first sentence of your message.'],
+    [/\b(report|proposal|brief|essay)\b/i,'Write one sentence describing the outcome.'],
+    [/\b(read|chapter|book)\b/i,'Read the first two pages.'],
+    [/\b(review|feedback)\b/i,'Read the first item and mark one thing to follow up.'],
+    [/\b(study|revise|exam)\b/i,'Try one practice question on the first topic.']
+  ];
+  return steps.find(([pattern])=>pattern.test(title))?.[1] || 'Give this two minutes, then decide whether to keep going.';
+}
+
 export function emptyState() { return {version:VERSION, revision:0, tasks:[], goals:[], routines:[], logs:[], notes:[], activities:[], sessions:[], focus:null, preferences:{theme:'system',showRoutines:true,showTomorrow:true}, sample:false}; }
 function fail(message) { throw new Error(message); }
 function title(s) { if (typeof s !== 'string' || !s.trim() || s.trim().length>180) fail('Add a title of 1–180 characters.'); return s.trim(); }
@@ -38,7 +52,8 @@ export function applyCommand(input, command, now = new Date()) {
       if (time && (!date || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time))) fail('A time block needs a valid date and start time.');
       const estimate = c.estimate === '' || c.estimate == null ? null : amount(c.estimate,1440);
       if (time && !estimate) fail('Add a duration for your time block.');
-      const task = {...old, id:old?.id || uid(), title:title(c.title), date, time, estimate, firstStep:text(c.firstStep || '',500), goalId:goalLink(s,c.goalId), status:old?.status || 'open', completedAt:old?.completedAt || null, completedDay:old?.completedDay || '', createdAt:old?.createdAt || at, updatedAt:at, priority:old?.priority || false, moves:old?.moves || 0, unplanned:old?.unplanned || !!c.unplanned, archived:false};
+      const firstStep = old ? c.firstStep ?? old.firstStep : c.firstStep?.trim() || firstStepFor(c.title);
+      const task = {...old, id:old?.id || uid(), title:title(c.title), date, time, estimate, firstStep:text(firstStep,500), goalId:goalLink(s,c.goalId), status:old?.status || 'open', completedAt:old?.completedAt || null, completedDay:old?.completedDay || '', createdAt:old?.createdAt || at, updatedAt:at, priority:old?.priority || false, moves:old?.moves || 0, unplanned:old?.unplanned || !!c.unplanned, archived:false};
       if (old && old.date !== date) { task.moves++; task.priority=false; activity('rescheduled',task.id,task.title,{from:old.date,to:date}); }
       for(const key of ['definition','cue','fallback','preparation','notes']) task[key]=text(c[key]??old?.[key]??'',2000);
       task.milestoneId=c.milestoneId??old?.milestoneId??'';
@@ -142,7 +157,7 @@ export function applyCommand(input, command, now = new Date()) {
     case 'note.delete': { get(s.notes,c.id); s.notes=s.notes.filter(n=>n.id!==c.id); break; }
     case 'note.to-task': {
       const note=get(s.notes,c.id); if(note.convertedTaskId) return input;
-      const taskId=uid(); s.tasks.push({id:taskId,title:title(c.title||note.body.slice(0,180)),date:'',time:'',estimate:null,firstStep:'',goalId:note.goalId,status:'open',completedAt:null,completedDay:'',createdAt:at,updatedAt:at,priority:false,moves:0,unplanned:false,archived:false});
+      const taskId=uid(),followUp=title(c.title||note.body.slice(0,180)); s.tasks.push({id:taskId,title:followUp,date:'',time:'',estimate:null,firstStep:firstStepFor(followUp),goalId:note.goalId,status:'open',completedAt:null,completedDay:'',createdAt:at,updatedAt:at,priority:false,moves:0,unplanned:false,archived:false});
       note.convertedTaskId=taskId; activity('captured',taskId,'Created follow-up task'); break;
     }
     case 'focus.start': {

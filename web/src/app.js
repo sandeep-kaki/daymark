@@ -2,6 +2,8 @@ import {initializeAccount,startSync,account,configured,syncStatus,connect,discon
 import {openStore,draftPrefix,snapshot,dispatch,subscribe,replaceWorkspace,exportWorkspace} from './store.js';
 import {dayKey,addDays,emptyState,parseBackup,elapsedMs,uid} from './domain.js';
 import {field,textarea,select,button as b,esc as e,goalSelect} from './ui.js';
+import {applyAppearance,setAppearance,appearanceSettings,appearanceGroup} from './appearance.js';
+import {pip,pipLine} from './pip.js';
 import {shell,screens,daily,goals,journal,review,taskRow,navigationLinks} from './views.js';
 const root=document.querySelector('#app'), dialog=document.querySelector('dialog'), toast=document.querySelector('#toast');
 let offset=0, planDay=addDays(dayKey(),1), reviewDay=dayKey(),period='week',saving=false,submit,revision,timeout,previousFocus,lastDay=dayKey();
@@ -15,9 +17,31 @@ matchMedia('(max-width:720px)').addEventListener('change',()=>{if(drawer.open)dr
 const day=()=>page()==='Plan'?planDay:addDays(dayKey(),offset);
 const s=()=>snapshot(), task=id=>s().tasks.find(t=>t.id===id);
 const cmd=(type,fields={})=>dispatch({type,...fields,commandId:uid()});
-function render(){const p=page(),state=s();document.documentElement.dataset.theme=state.preferences.theme;
- const body=p==='Today'||p==='Plan'?daily(state,day(),p==='Plan'):p==='Goals'?goals(state):p==='Journal'?journal(state):review(state,reviewDay,period);
- root.innerHTML=shell(p,body+(p==='Today'&&offset===0?guideInvitation():''));showSyncStatus();}
+let pipCue=null, welcomePlayed=false;
+function gesture(pose,scope=root){
+ const pet=scope.querySelector('.pip');
+ if(!pet)return;
+ pet.dataset.pose=pose;
+ pet.getAnimations({subtree:true}).forEach(animation=>{animation.cancel();animation.play();});
+}
+function rememberCue(id){
+ pipCue={id,day:day(),workspace:draftPrefix()};
+}
+function render(){
+ const p=page(),state=s();
+ applyAppearance(state.preferences.theme);
+ const scope=draftPrefix()+p+day();
+ const existing=root.querySelector('.quick-task input');
+ const draft=existing?.dataset.scope===scope?existing.value:'';
+ const editing=existing&&document.activeElement===existing;
+ const cue=pipCue?.workspace===draftPrefix()?pipCue:null;
+ const body=p==='Today'||p==='Plan'?daily(state,day(),p==='Plan',cue):p==='Goals'?goals(state):p==='Journal'?journal(state):review(state,reviewDay,period);
+ root.innerHTML=shell(p,body+(p==='Today'&&offset===0?guideInvitation():''));
+ const input=root.querySelector('.quick-task input');
+ if(input){input.dataset.scope=scope;input.value=draft;if(editing)input.focus({preventScroll:true});}
+ if(p==='Today'&&!welcomePlayed&&!state.focus){gesture('welcome');welcomePlayed=true;}
+ showSyncStatus();
+}
 function showSyncStatus(){
  const label=root.querySelector('[data-cloud-status]');
  if(label)label.textContent=account()?syncStatus():'Device only';
@@ -45,7 +69,7 @@ dialog.addEventListener('close',()=>{
  const fallback=action&&root.querySelector(`[data-action="${CSS.escape(action)}"]`);
  (fallback||root.querySelector('.priority button,header button'))?.focus();
 });
-dialog.addEventListener('input',ev=>{formDirty=!ev.target.closest('form')?.oninput;});
+dialog.addEventListener('input',ev=>{if(!ev.target.hasAttribute('data-appearance'))formDirty=!ev.target.closest('form')?.oninput;});
 window.addEventListener('beforeunload',ev=>{if(formDirty){ev.preventDefault();ev.returnValue='';}});
 dialog.addEventListener('cancel',ev=>{ev.preventDefault();close();});
 window.addEventListener('popstate',()=>{if(dialog.open){if(formDirty&&!confirm('Discard the changes in this form?')){history.pushState({sheet:true},'',location.href);return;}formDirty=false;dialog.close();}if(s())render();});
@@ -73,8 +97,8 @@ function openGuide(step){
  step=Number.isInteger(step)?Math.min(3,Math.max(0,step)):0;
  saveGuide({step,started:true,hidden:false,done:false});
  const current=s().tasks.find(t=>t.priority&&t.date===dayKey()&&!t.archived&&t.status!=='done');
- const rabbit=s().preferences.showCompanion===false?'':'<img class="guide-rabbit" src="./rabbit.png" alt="">';
- const intro=`<div class="guide-lead">${rabbit}<small>First-day guide · ${step+1} of 4</small></div>`;
+ const rabbit=s().preferences.showCompanion===false?'':pip(step===0?'welcome':step===1?'focus':'rest');
+ const intro=`<div class="guide-lead">${rabbit}<small class="${step===0&&rabbit?'pip-note':''}">First-day guide · ${step+1} of 4</small></div>`;
  const links=(step?b('Back','guide-back'):'')+b('Pause guide','guide-pause');
  const next=()=>{openGuide(step+1);return 'next-form';};
  if(step===0){
@@ -104,7 +128,10 @@ function openGuide(step){
 function taskForm(id='',date='',primary=false){const t=task(id)||{};
  form(id?'Task details':primary?'Choose your priority':'New task',field('Title','title',t.title,'text',required)+field('Planned day','date',t.date??date,'date',primary?'required':'')+
  (primary?field('First action','firstStep',t.firstStep):'')+`<details ${id?'open':''}><summary>Planning details</summary>`+textarea('Definition of done','definition',t.definition)+(primary?'':field('First action','firstStep',t.firstStep))+field('Start cue','cue',t.cue)+field('Fallback','fallback',t.fallback)+field('Preparation','preparation',t.preparation)+field('Estimated minutes','estimate',t.estimate,'number',number)+field('Start time','time',t.time,'time')+select('Remind at start while open','remind',choices(['No','Yes']),t.remind?'Yes':'No')+field('Deadline','deadline',t.deadline,'date')+goalSelect(s(),t.goalId)+select('Milestone · optional','milestoneId',[['','No milestone'],...s().goals.flatMap(g=>g.milestones.map(m=>[m.id,g.title+' · '+m.title]))],t.milestoneId)+textarea('Notes','notes',t.notes)+'</details>',
- data=>guarded('task.save',{...data,id,primary,remind:data.remind==='Yes'}),primary?'Save priority':'Save task',id?`<div class="actions tools">${!t.archived&&t.status!=='done'?b('Start','start',id)+b('Focus','focus-start',id)+b('Make priority','promote',id)+b('I’m stuck','stuck',id):''}${b(t.archived?'Restore':'Archive','archive',id)}${b('Delete','delete-task',id)}</div>`:'');}
+ async data=>{
+  const next=await guarded('task.save',{...data,id,primary,remind:data.remind==='Yes'});
+  if(!id){rememberCue(next.tasks.at(-1).id);render();gesture('listen');}
+ },primary?'Save priority':'Save task',id?`<div class="actions tools">${!t.archived&&t.status!=='done'?b('Start','start',id)+b('Focus','focus-start',id)+b('Make priority','promote',id)+b('I’m stuck','stuck',id):''}${b(t.archived?'Restore':'Archive','archive',id)}${b('Delete','delete-task',id)}</div>`:'');}
 function noteForm(id,kind='entry'){const n=s().notes.find(x=>x.id===id)||{};const key=draftPrefix()+(id||kind);let draft={};
  try{draft=JSON.parse(localStorage.getItem(key)||'{}');}catch{}
  form(id?'Edit entry':kind==='review'?'Record an adjustment':'Write an entry',textarea('Your entry','body',draft.body??n.body,'required maxlength="20000"')+field('Day','day',draft.day||n.day||(kind==='review'?reviewDay:dayKey()),'date','required')+select('Category','kind',choices(['entry','win','lesson','idea','review']),draft.kind||n.kind||kind)+goalSelect(s(),draft.goalId??n.goalId),
@@ -113,11 +140,7 @@ function noteForm(id,kind='entry'){const n=s().notes.find(x=>x.id===id)||{};cons
 function download(){const blob=new Blob([JSON.stringify({format:'daymark-workspace',schemaVersion:1,exportedAt:new Date().toISOString(),payload:JSON.parse(exportWorkspace())},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='daymark-'+dayKey()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function clearDrafts(){for(const k of Object.keys(localStorage))if(k.startsWith(draftPrefix()))localStorage.removeItem(k);}
 function settings(){const p=s().preferences;
- const themes=['System','Light','Dark'].map(name=>{
-  const value=name.toLowerCase();
-  return `<label><input type="radio" name="theme" value="${value}" ${(p.theme||'system')===value?'checked':''}><span class="theme-swatch swatch-${value}" aria-hidden="true"></span>${name}</label>`;
- }).join('');
- form('Settings','<fieldset class="theme-options"><legend>Appearance</legend>'+themes+'</fieldset>'+select('Coach','coach',choices(['off','gentle','direct']),p.coach||'gentle')+
+ form('Settings',appearanceSettings()+select('Coach','coach',choices(['off','gentle','direct']),p.coach||'gentle')+
  '<label class="companion-setting"><input type="checkbox" name="showCompanion" '+(p.showCompanion===false?'':'checked')+'> Show the rabbit companion</label>'+select('Show tomorrow shortcut','showTomorrow',choices(['Yes','No']),p.showTomorrow?'Yes':'No')+select('Show routines on Today','showRoutines',choices(['Yes','No']),p.showRoutines?'Yes':'No')+
  '<details><summary>In-app reminders</summary><p>Leave the time blank to turn a reminder off. Reminders appear while Daymark is open.</p>'+field('Preparation','prepTime',p.prepTime,'time')+field('Morning','morningTime',p.morningTime,'time')+field('Quiet hours start','quietStart',p.quietStart||'22:00','time')+field('Quiet hours end','quietEnd',p.quietEnd||'07:00','time')+'</details>',
  data=>guarded('preferences',{...data,showCompanion:data.showCompanion==='on',showTomorrow:data.showTomorrow==='Yes',showRoutines:data.showRoutines==='Yes'}),'Save settings',
@@ -126,6 +149,9 @@ function routines(id){const r=s().routines.find(r=>r.id===id)||{};
  form(id?'Edit routine':'New routine',field('Routine','title',r.title,'text',required)+select('Measure','kind',choices(['count','minutes','check']),r.kind)+select('Frequency','period',choices(['daily','weekly']),r.period)+field('Target per period','target',r.target||1,'number','required min="1"')+field('Standard amount','step',r.step||1,'number','required min="1"')+field('Minimum version','minimum',r.minimum)+field('Unit','unit',r.unit||'times')+field('Cue','cue',r.cue)+`<fieldset><legend>Scheduled weekdays (optional)</legend>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d,i)=>`<label><input type="checkbox" name="w${i}" ${r.weekdays?.includes(i)?'checked':''}>${d}</label>`).join('')}</fieldset>`+goalSelect(s(),r.goalId),data=>guarded('routine.save',{...data,id,weekdays:[0,1,2,3,4,5,6].filter(i=>data['w'+i])}),'Save routine',id?b(r.paused?'Resume routine':'Pause routine','routine-pause',id):'');}
 async function act(action,id){
  switch(action){
+ case 'appearance-mode':return form('Appearance mode',appearanceGroup('theme','Color mode'),null);
+ case 'appearance-reset':setAppearance('reset');return;
+ case 'greet-pip':gesture('greet',dialog.open?dialog:root);return;
  case 'guide-open':return openGuide();
  case 'guide-back':return openGuide(guideState().step-1);
  case 'guide-next':return openGuide(guideState().step+1);
@@ -143,17 +169,17 @@ async function act(action,id){
  case 'pick':return taskFormForDay(id);
  case 'promote':await cmd('task.priority',{id});break;
  case 'all':case 'inbox':case 'missed':return form({all:'All tasks',inbox:'Inbox',missed:'Unfinished from earlier'}[action],b('Add task','new')+(s().tasks.filter(t=>action==='all'||!t.archived&&t.status!=='done'&&(action==='inbox'?!t.date:t.date&&t.date<dayKey())).map(taskRow).join('')||'<p>No tasks here.</p>'),null);
- case 'complete':{const commandId=uid();const state=await dispatch({type:'task.toggle',id,status:'done',commandId});const event=state.activities.find(a=>a.commandId===commandId);if(event?.previous?.priority)root.querySelector('.rabbit')?.classList.add('rabbit-hop');close();flash('Task completed',event?b('Undo','undo',event.id):'');return;}
- case 'undo':await cmd('task.undo',{eventId:id});break;
+ case 'complete':{const commandId=uid();const state=await dispatch({type:'task.toggle',id,status:'done',commandId});const event=state.activities.find(a=>a.commandId===commandId);rememberCue(id);render();gesture('nod');close();flash('Task completed',event?b('Undo','undo',event.id):'');return;}
+ case 'undo':await cmd('task.undo',{eventId:id});pipCue=null;render();break;
  case 'reopen':await cmd('task.toggle',{id,status:'open'});break;
  case 'archive':await cmd('task.archive',{id});break;
  case 'delete-task':return form('Delete this task?', '<p>Its activity and focus sessions will also be removed.</p>',()=>guarded('task.delete',{id}),'Delete task');
  case 'rest':case 'day-settings':return form('Day settings',field('Available minutes','budget',s().days?.[day()]?.budget,'number',number)+select('Day type','type',choices(['Work','Rest']),action==='rest'||s().days?.[day()]?.rest?'Rest':'Work'),data=>guarded('day.save',{day:day(),budget:data.budget,rest:data.type==='Rest'}));
  case 'start':await cmd('task.start',{id});return form('Started',`<h3>${e(task(id).title)}</h3><p>${e(task(id).firstStep||'Take your first step.')}</p>${b('Open focus timer','focus-start',id)}${b('Continue without timer','close')}`,null);
- case 'stuck':return form('What got in the way?',select('Obstacle','reason',choices(['Too big','Low energy','Blocked','Interrupted','No longer important','Skip']))+textarea('Progress or blocker','detail',task(id)?.fallback||''),
+ case 'stuck':return form('What got in the way?',pipLine(s().preferences.showCompanion!==false,'listen',task(id)?.firstStep||'What could you try for two minutes?')+select('Obstacle','reason',choices(['Too big','Low energy','Blocked','Interrupted','No longer important','Skip']))+textarea('Progress or blocker','detail',task(id)?.fallback||''),
  data=>data.reason==='Skip'?Promise.resolve():guarded('task.progress',{id,detail:[data.reason,data.detail].filter(Boolean).join(' · ')}),'Record partial progress',b('Move or change scope','edit',id)+b('Drop commitment','drop',id));
  case 'drop':await guarded('task.save',{...task(id),date:'',time:'',remind:false});break;
- case 'focus-start':await cmd('focus.start',{id});root.querySelector('.rabbit')?.classList.add('rabbit-settle');break;
+ case 'focus-start':await cmd('focus.start',{id});gesture('focus');break;
  case 'focus.finish':if(s().focus&&elapsedMs(s().focus)>86400000)return form('Finish interrupted session',field('Minutes actually worked','minutes','','number','required min="1" max="1440"'),data=>guarded('focus.finish',data),'Record session');await cmd(action);break;
  case 'focus.pause':case 'focus.resume':case 'focus.extend':await cmd(action);break;
  case 'dismiss':await cmd('preferences',{dismissedDay:dayKey()});break;
@@ -180,8 +206,19 @@ async function act(action,id){
  }close();flash('Saved');
 }
 function taskFormForDay(id){taskForm(id,day(),true);dialog.querySelector('[name=date]').value=day();}
-document.addEventListener('click',async ev=>{const target=ev.target.closest('[data-action]');if(!target||saving)return;if(dialog.open&&formDirty&&target.dataset.action!=='close'){if(!confirm('Discard unsaved changes before continuing?'))return;formDirty=false;}saving=true;try{await act(target.dataset.action,target.dataset.id||'');}catch(err){if(dialog.open)dialog.querySelector('[role=alert]').textContent=err.message;else flash(err.message);}finally{saving=false;}});
-document.addEventListener('change',async ev=>{const el=ev.target;if(el.dataset.date&&el.value){if(el.dataset.date==='plan')planDay=el.value;else reviewDay=el.value;render();}if(el.hasAttribute('data-period')){period=el.value;render();}
+document.addEventListener('click',async ev=>{const target=ev.target.closest('[data-action]');if(!target||saving)return;if(dialog.open&&formDirty&&!['close','greet-pip','appearance-reset'].includes(target.dataset.action)){if(!confirm('Discard unsaved changes before continuing?'))return;formDirty=false;}saving=true;try{await act(target.dataset.action,target.dataset.id||'');}catch(err){if(dialog.open)dialog.querySelector('[role=alert]').textContent=err.message;else flash(err.message);}finally{saving=false;}});
+root.addEventListener('submit',async ev=>{
+ if(!ev.target.matches('.quick-task'))return;
+ ev.preventDefault();if(saving)return;
+ const input=ev.target.elements.title,title=input.value.trim();if(!title){input.focus();return;}
+ saving=true;
+ try{
+  const next=await cmd('task.save',{title,date:day()});
+  rememberCue(next.tasks.at(-1).id);render();const field=root.querySelector('.quick-task input');
+  if(field){field.value='';field.focus({preventScroll:true});}gesture('listen');flash('Task added');
+ }catch(err){flash(err.message);}finally{saving=false;}
+});
+document.addEventListener('change',async ev=>{const el=ev.target;if(el.dataset.appearance){try{setAppearance(el.dataset.appearance,el.value);}catch{applyAppearance();flash('Could not save the appearance on this device.');}return;}if(el.dataset.date&&el.value){if(el.dataset.date==='plan')planDay=el.value;else reviewDay=el.value;render();}if(el.hasAttribute('data-period')){period=el.value;render();}
  if(el.id==='restore-file'&&el.files[0]){try{if(el.files[0].size>10485760)throw Error('Choose a backup smaller than 10 MB.');const data=parseBackup(await el.files[0].text());form('Replace this workspace?',`<p>Incoming backup: ${data.tasks.length} tasks, ${data.goals.length} goals and ${data.notes.length} entries. Restored timers will be paused.</p>`+b('Download current workspace','export'),async()=>{await replaceWorkspace(data,revision);clearDrafts();},'Replace workspace');}catch(err){dialog.querySelector('[role=alert]').textContent=err.message;}}});
 async function tick(){const today=dayKey();if(lastDay!==today){lastDay=today;if(!dialog.open)render();}const f=s()?.focus,clock=document.querySelector('#elapsed');if(clock&&f)clock.textContent=Math.floor(elapsedMs(f)/60000)+' min '+Math.floor(elapsedMs(f)/1000)%60+' sec elapsed · '+Math.max(0,Math.ceil((f.targetMinutes||25)-elapsedMs(f)/60000))+' min remaining';
  const due=s()?.tasks.find(t=>t.remind&&!t.archived&&t.status!=='done'&&t.deliveredKey!==t.reminderKey&&t.date===today&&Math.abs(Date.now()-new Date(t.date+'T'+t.time).getTime()-30000)<30000);
