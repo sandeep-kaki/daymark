@@ -17,7 +17,7 @@ const run=Date.now();
  export {doc,onSnapshot,runTransaction} from 'firebase/firestore';
  export function getAuth(app){const a=auth.getAuth(app);auth.connectAuthEmulator(a,'http://127.0.0.1:9099',{disableWarnings:true});return a;}
  export function getFirestore(app){const db=fs.getFirestore(app);fs.connectFirestoreEmulator(db,'127.0.0.1',8787);return db;}
- export function signInWithPopup(a){const sub=window.testIdentity;return auth.signInWithCredential(a,auth.GoogleAuthProvider.credential(JSON.stringify({sub,email:sub+'@example.test',email_verified:true})));}`,resolveDir:root},bundle:true,format:'esm',write:false});
+ export function signInWithPopup(a){if(window.cancelTestConsent)throw Error('Google sign-in cancelled');const sub=window.testIdentity;return auth.signInWithCredential(a,auth.GoogleAuthProvider.credential(JSON.stringify({sub,email:sub+'@example.test',email_verified:true})));}`,resolveDir:root},bundle:true,format:'esm',write:false});
  const server=spawn(process.execPath,['scripts/serve.mjs'],{cwd:root,env:{...process.env,PORT:4197},windowsHide:true});let browser;
  try{
  await once(server.stdout,'data');browser=await chromium.launch({executablePath:process.env.DAYMARK_CHROMIUM||undefined,headless:true,args:['--no-proxy-server']});
@@ -26,7 +26,20 @@ const run=Date.now();
   await c.route('**/firebase-config.json',route=>route.fulfill({json:config}));
   await c.route('**/vendor/firebase.js',route=>route.fulfill({contentType:'text/javascript',body:bundle.outputFiles[0].text}));
   await c.route(origin+'/',async route=>{const res=await route.fetch();await route.fulfill({response:res,headers:{...res.headers(),'content-security-policy':"default-src 'self'; connect-src 'self' http://127.0.0.1:9099 http://127.0.0.1:8787; style-src 'self' 'unsafe-inline'"}});});
-  const p=await c.newPage();p.on('console', m=>{if(m.type()==='error') console.error('Emulator browser:',m.text().replace(/key=[^ '&]+/g,'key=demo').slice(0,900));});p.setDefaultTimeout(45000);p.on('requestfailed',r=>console.warn('Test request:',new URL(r.url()).origin,r.failure()?.errorText));await p.goto(origin);if(seed)await capture(p,'Existing device task');await p.getByRole('button',{name:'Settings',exact:true}).click();await p.getByRole('button',{name:'Continue with Google'}).click();if(seed)await p.getByRole('checkbox').check();await p.getByRole('button',{name:'Sign in with Google'}).click();
+  const p=await c.newPage();p.on('console', m=>{if(m.type()==='error') console.error('Emulator browser:',m.text().replace(/key=[^ '&]+/g,'key=demo').slice(0,900));});p.setDefaultTimeout(45000);p.on('requestfailed',r=>console.warn('Test request:',new URL(r.url()).origin,r.failure()?.errorText));await p.goto(origin);
+  const press=name=>p.getByRole('button',{name,exact:true}).click();
+  if(seed){
+   await capture(p,'Existing device task');
+   await press('Settings');await press('First-day guide');await press('Explore without a task');
+   await press('Continue');await press('Continue');await press('Set up Google sync');
+   await p.evaluate(()=>window.cancelTestConsent=true);await press('Sign in with Google');
+   await p.getByRole('alert').filter({hasText:'Google sign-in cancelled'}).waitFor();
+   await p.evaluate(()=>window.cancelTestConsent=false);await press('Close');
+   await press('Resume first-day guide');await press('Set up Google sync');
+  }else{
+   await press('Settings');await press('Continue with Google');
+  }
+  if(seed)await p.getByRole('checkbox').check();await p.getByRole('button',{name:'Sign in with Google'}).click();
   try { await p.locator('[data-cloud-status]').filter({hasText:'Synced with Google'}).waitFor(); }
   catch(error){console.error('Emulator status:',await p.locator('[data-cloud-status],dialog[open] [role=alert],.loading').allTextContents());throw error;}
   return p;

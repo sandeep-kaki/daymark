@@ -54,3 +54,18 @@ article {max-width:960px}
  .priority.with-companion h2,.priority.with-companion .priority-copy>small {padding-right:64px}
  .rabbit {position:absolute;right:12px;top:16px;width:66px;height:76px}
 }
+
+.guide-invite {display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-top:.8rem}
+.guide-invite button:last-child {font-size:.82rem;color:var(--dim)}
+.guide-lead {display:flex;align-items:center;gap:.8rem;margin:.8rem 0;color:var(--dim)}
+.guide-rabbit {width:45px;height:52px;object-fit:contain;transform-origin:50% 100%}
+.guide-example {display:grid;gap:.45rem;margin:1rem 0;padding:1rem;border-radius:12px;background:var(--tint)}
+.guide-example button {justify-self:start}
+@media(prefers-reduced-motion:no-preference){
+ .guide-rabbit {animation:guide-greeting .38s ease-out}
+ .rabbit-hop {animation:priority-hop .5s ease-in-out}
+ .rabbit-settle {transform-origin:center bottom;animation:focus-settle .5s ease-out}
+ @keyframes guide-greeting {0%{transform:rotate(-6deg)} 65%{transform:rotate(2deg)}}
+ @keyframes priority-hop {40%{transform:translateY(-8px) rotate(-3deg)}}
+ @keyframes focus-settle {45%{transform:scale(1.03,.94)}}
+}

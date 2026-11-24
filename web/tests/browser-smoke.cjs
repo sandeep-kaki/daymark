@@ -59,6 +59,28 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  await tab.getByRole('button',{name:'Capture task',exact:true}).first().click();await tab.getByLabel('Title',{exact:true}).fill('Capture from second tab');await tab.locator('dialog button[type=submit]').click();
  await p.locator('dialog button[type=submit]').click();await p.getByRole('alert').filter({hasText:'changed'}).waitFor();assert.equal(await p.getByLabel('Title',{exact:true}).inputValue(),'Conflicting capture');
  await tab.close();
+ const learner=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});
+ const guide=await learner.newPage();
+ const press=name=>guide.getByRole('button',{name,exact:true}).click();
+ await guide.goto(origin);
+ await press('Dismiss guide');await guide.reload();await press('Settings');await press('First-day guide');
+ await guide.getByLabel('Priority',{exact:true}).fill('Prepare a lesson');
+ await guide.getByLabel('First small step').fill('Choose one example');
+ await press('Pause guide');await guide.reload();await press('Resume first-day guide');
+ assert.equal(await guide.getByLabel('Priority',{exact:true}).inputValue(),'Prepare a lesson');
+ await press('Save priority and continue');await press('Preview timer');await guide.getByText('25:00',{exact:true}).waitFor();
+ await press('Back');await guide.getByRole('dialog').getByText('Prepare a lesson',{exact:true}).waitFor();
+ await press('Continue');await press('Continue');await press('Continue');
+ if(await guide.getByRole('button',{name:'Set up Google sync'}).isVisible()){
+  await press('Set up Google sync');await press('Close');await press('Resume first-day guide');
+ }
+ await press('Finish on this device');await guide.reload();
+ await guide.getByRole('heading',{name:'Prepare a lesson',exact:true}).waitFor();
+ assert.equal(await guide.getByRole('button',{name:'Resume first-day guide'}).count(),0);
+ await press('Settings');await press('First-day guide');await guide.getByRole('heading',{name:'Choose your priority'}).waitFor();
+ assert.equal(await guide.evaluate(async()=>(await import('./src/store.js')).snapshot().tasks.length),1);
+ await learner.close();
+ console.log('PASS first-day guide: dismiss, replay, recover draft, save a real priority once, preview focus, cancel sync, finish locally.');
  const unavailable=await browser.newContext();await unavailable.addInitScript(()=>Object.defineProperty(window,'indexedDB',{value:undefined}));const unavailablePage=await unavailable.newPage();await unavailablePage.goto(origin);await unavailablePage.getByRole('heading',{name:'Workspace unavailable'}).waitFor();await unavailable.close();
  console.log('PASS responsive checks at 320 and 1280 px in both themes; stale cross-tab form retains input.');
  console.log('PASS Chromium '+browser.version()+': capture, goal, milestone, priority, start, partial, completion/undo, retrospective work, draft recovery, review, five offline destinations, portable restore into clean profile.');

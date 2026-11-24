@@ -16,7 +16,8 @@ const day=()=>page()==='Plan'?planDay:addDays(dayKey(),offset);
 const s=()=>snapshot(), task=id=>s().tasks.find(t=>t.id===id);
 const cmd=(type,fields={})=>dispatch({type,...fields,commandId:uid()});
 function render(){const p=page(),state=s();document.documentElement.dataset.theme=state.preferences.theme;
- root.innerHTML=shell(p,p==='Today'||p==='Plan'?daily(state,day(),p==='Plan'):p==='Goals'?goals(state):p==='Journal'?journal(state):review(state,reviewDay,period));showSyncStatus();}
+ const body=p==='Today'||p==='Plan'?daily(state,day(),p==='Plan'):p==='Goals'?goals(state):p==='Journal'?journal(state):review(state,reviewDay,period);
+ root.innerHTML=shell(p,body+(p==='Today'&&offset===0?guideInvitation():''));showSyncStatus();}
 function showSyncStatus(){
  const label=root.querySelector('[data-cloud-status]');
  if(label)label.textContent=account()?syncStatus():'Device only';
@@ -38,16 +39,68 @@ function form(name,fields,handler,label='Save',extras=''){
  revision=s().revision;submit=handler;formDirty=false;
  dialog.innerHTML=`<div class="line"><h2 id="dialog-title">${e(name)}</h2>${b('Close','close','','quiet')}</div><form>${fields}<p role="alert"></p>${handler?`<button class="primary" type="submit">${e(label)}</button>`:''}</form>${extras}`;
  if(!dialog.open)dialog.showModal();dialog.querySelector('input:not([type=hidden]),textarea,select,button[type=submit]')?.focus();}
-dialog.addEventListener('close',()=>previousFocus?.focus());
+dialog.addEventListener('close',()=>{
+ if(previousFocus?.isConnected){previousFocus.focus();return;}
+ const action=previousFocus?.dataset.action;
+ const fallback=action&&root.querySelector(`[data-action="${CSS.escape(action)}"]`);
+ (fallback||root.querySelector('.priority button,header button'))?.focus();
+});
 dialog.addEventListener('input',ev=>{formDirty=!ev.target.closest('form')?.oninput;});
 window.addEventListener('beforeunload',ev=>{if(formDirty){ev.preventDefault();ev.returnValue='';}});
 dialog.addEventListener('cancel',ev=>{ev.preventDefault();close();});
 window.addEventListener('popstate',()=>{if(dialog.open){if(formDirty&&!confirm('Discard the changes in this form?')){history.pushState({sheet:true},'',location.href);return;}formDirty=false;dialog.close();}if(s())render();});
 window.addEventListener('hashchange',()=>{if(s())render();window.scrollTo(0,0);});
 dialog.addEventListener('submit',async ev=>{ev.preventDefault();if(!submit||saving)return;saving=true;
- try{const result=await submit(Object.fromEntries(new FormData(ev.target)));if(result==='workspace-switch'){formDirty=false;return;}close(true);flash('Saved');}catch(err){dialog.querySelector('[role=alert]').textContent=err.message;}finally{saving=false;}});
+ try{const result=await submit(Object.fromEntries(new FormData(ev.target)));if(result==='workspace-switch'||result==='next-form'){formDirty=false;return;}close(true);flash('Saved');}catch(err){dialog.querySelector('[role=alert]').textContent=err.message;}finally{saving=false;}});
 const required='required maxlength="180"',number='min="1" max="1440"', choices=arr=>arr.map(x=>[x,x]);
 const guarded=(type,data)=>cmd(type,{...data,expectedRevision:revision});
+const guideTitles=['Choose your priority','Try a focus session','Look back on your day','Choose where to save'];
+const guideKey=()=>draftPrefix()+'first-day-guide-v1';
+function guideState(){
+ try{return JSON.parse(localStorage.getItem(guideKey()))||{};}catch{return {};}
+}
+function saveGuide(changes){
+ localStorage.setItem(guideKey(),JSON.stringify({...guideState(),...changes}));
+}
+function guideInvitation(){
+ const guide=guideState();
+ if(guide.hidden||(!guide.started&&(s().revision>0||account())))return '';
+ return `<div class="guide-invite">${b(guide.started?'Resume first-day guide':'First-day guide','guide-open','','quiet','journal')}${b('Dismiss guide','guide-hide','','quiet')}</div>`;
+}
+function openGuide(step){
+ const saved=guideState();
+ if(step===undefined)step=saved.done?0:saved.step||0;
+ step=Number.isInteger(step)?Math.min(3,Math.max(0,step)):0;
+ saveGuide({step,started:true,hidden:false,done:false});
+ const current=s().tasks.find(t=>t.priority&&t.date===dayKey()&&!t.archived&&t.status!=='done');
+ const rabbit=s().preferences.showCompanion===false?'':'<img class="guide-rabbit" src="./rabbit.png" alt="">';
+ const intro=`<div class="guide-lead">${rabbit}<small>First-day guide · ${step+1} of 4</small></div>`;
+ const links=(step?b('Back','guide-back'):'')+b('Pause guide','guide-pause');
+ const next=()=>{openGuide(step+1);return 'next-form';};
+ if(step===0){
+  if(current){
+   form(guideTitles[step],intro+'<p>Your priority for today</p><strong>'+e(current.title)+'</strong>',next,'Continue',links);
+  }else{
+   form(guideTitles[step],intro+'<p>What would make today feel worthwhile? Pick something you can start today.</p>'+field('Priority','title',saved.title||'','text',required)+field('First small step','firstStep',saved.firstStep||'','text','maxlength="500" placeholder="Open the document and write a heading"')+(s().goals.length?goalSelect(s(),saved.goalId):''),async data=>{
+    await guarded('task.save',{...data,date:dayKey(),primary:true});
+    saveGuide({title:'',firstStep:'',goalId:''});
+    return next();
+   },'Save priority and continue',links+b('Explore without a task','guide-next'));
+   dialog.querySelector('form').oninput=ev=>saveGuide(Object.fromEntries(new FormData(ev.currentTarget)));
+  }
+ }else if(step===1){
+  const detail=current?.firstStep||current?.title||'Choose one small action you can do now.';
+  form(guideTitles[step],intro+'<p>On Today, select <strong>Start</strong> to work on your first step. You can open the focus timer or work at your own pace.</p><div class="guide-example"><small>Focus preview</small><strong>'+e(detail)+'</strong>'+b('Preview timer','guide-preview')+'</div>',next,'Continue',links);
+ }else if(step===2){
+  form(guideTitles[step],intro+'<p>Completing a task adds it to <strong>Journal</strong>. Choose <strong>Write an entry</strong> to remember a lesson or a win.</p><div class="guide-example"><small>Reflection prompt</small><strong>What made today easier?</strong></div><p>Use <strong>Review</strong> to revisit the week. In <strong>Plan</strong> you can schedule tomorrow, and in <strong>Goals</strong> you can connect tasks to a longer-term outcome.</p>',next,'Continue',links);
+ }else{
+  const storage=account()?'Your workspace uses Google sync. You can check its status in Settings.':'Tasks and journal entries save in this browser. Choose Google sync to use them on another device.';
+  form(guideTitles[step],intro+'<p>'+storage+'</p>',()=>{
+   localStorage.setItem(guideKey(),JSON.stringify({done:true,hidden:true}));render();
+  },account()?'Finish guide':'Finish on this device',links+(!account()&&configured()?b('Set up Google sync','cloud-connect'):''));
+ }
+ render();
+}
 function taskForm(id='',date='',primary=false){const t=task(id)||{};
  form(id?'Task details':primary?'Choose your priority':'New task',field('Title','title',t.title,'text',required)+field('Planned day','date',t.date??date,'date',primary?'required':'')+
  (primary?field('First action','firstStep',t.firstStep):'')+`<details ${id?'open':''}><summary>Planning details</summary>`+textarea('Definition of done','definition',t.definition)+(primary?'':field('First action','firstStep',t.firstStep))+field('Start cue','cue',t.cue)+field('Fallback','fallback',t.fallback)+field('Preparation','preparation',t.preparation)+field('Estimated minutes','estimate',t.estimate,'number',number)+field('Start time','time',t.time,'time')+select('Remind at start while open','remind',choices(['No','Yes']),t.remind?'Yes':'No')+field('Deadline','deadline',t.deadline,'date')+goalSelect(s(),t.goalId)+select('Milestone · optional','milestoneId',[['','No milestone'],...s().goals.flatMap(g=>g.milestones.map(m=>[m.id,g.title+' · '+m.title]))],t.milestoneId)+textarea('Notes','notes',t.notes)+'</details>',
@@ -68,11 +121,21 @@ function settings(){const p=s().preferences;
  '<label class="companion-setting"><input type="checkbox" name="showCompanion" '+(p.showCompanion===false?'':'checked')+'> Show the rabbit companion</label>'+select('Show tomorrow shortcut','showTomorrow',choices(['Yes','No']),p.showTomorrow?'Yes':'No')+select('Show routines on Today','showRoutines',choices(['Yes','No']),p.showRoutines?'Yes':'No')+
  '<details><summary>In-app reminders</summary><p>Leave the time blank to turn a reminder off. Reminders appear while Daymark is open.</p>'+field('Preparation','prepTime',p.prepTime,'time')+field('Morning','morningTime',p.morningTime,'time')+field('Quiet hours start','quietStart',p.quietStart||'22:00','time')+field('Quiet hours end','quietEnd',p.quietEnd||'07:00','time')+'</details>',
  data=>guarded('preferences',{...data,showCompanion:data.showCompanion==='on',showTomorrow:data.showTomorrow==='Yes',showRoutines:data.showRoutines==='Yes'}),'Save settings',
- '<hr><section data-sync-panel>'+storagePanel()+'</section><details><summary>File transfer and deletion</summary>'+b('Download backup','export')+'<label class="field">Restore a backup<input type="file" id="restore-file" accept=".json,application/json"></label>'+b('Delete workspace','wipe')+'</details>');}
+ '<hr><section data-sync-panel>'+storagePanel()+'</section>'+b('First-day guide','guide-open')+'<details><summary>File transfer and deletion</summary>'+b('Download backup','export')+'<label class="field">Restore a backup<input type="file" id="restore-file" accept=".json,application/json"></label>'+b('Delete workspace','wipe')+'</details>');}
 function routines(id){const r=s().routines.find(r=>r.id===id)||{};
  form(id?'Edit routine':'New routine',field('Routine','title',r.title,'text',required)+select('Measure','kind',choices(['count','minutes','check']),r.kind)+select('Frequency','period',choices(['daily','weekly']),r.period)+field('Target per period','target',r.target||1,'number','required min="1"')+field('Standard amount','step',r.step||1,'number','required min="1"')+field('Minimum version','minimum',r.minimum)+field('Unit','unit',r.unit||'times')+field('Cue','cue',r.cue)+`<fieldset><legend>Scheduled weekdays (optional)</legend>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d,i)=>`<label><input type="checkbox" name="w${i}" ${r.weekdays?.includes(i)?'checked':''}>${d}</label>`).join('')}</fieldset>`+goalSelect(s(),r.goalId),data=>guarded('routine.save',{...data,id,weekdays:[0,1,2,3,4,5,6].filter(i=>data['w'+i])}),'Save routine',id?b(r.paused?'Resume routine':'Pause routine','routine-pause',id):'');}
 async function act(action,id){
  switch(action){
+ case 'guide-open':return openGuide();
+ case 'guide-back':return openGuide(guideState().step-1);
+ case 'guide-next':return openGuide(guideState().step+1);
+ case 'guide-pause':close(true);return render();
+ case 'guide-hide':saveGuide({hidden:true});return render();
+ case 'guide-preview':{
+  const preview=dialog.querySelector('.guide-example');
+  if(preview){preview.innerHTML='<small>Focus preview</small><strong>25:00</strong><p>During a real session you can pause or finish whenever you like.</p>';preview.setAttribute('role','status');}
+  return;
+ }
  case 'menu':drawer.querySelector('nav').innerHTML=navigationLinks(page());drawer.showModal();return;
  case 'close':return close();case 'today':case 'tomorrow':offset=Number(action==='tomorrow');return render();
  case 'new':case 'dated':case 'edit':case 'new-primary':return taskForm(id,action==='dated'||action==='new-primary'?day():'',action==='new-primary');
@@ -80,7 +143,7 @@ async function act(action,id){
  case 'pick':return taskFormForDay(id);
  case 'promote':await cmd('task.priority',{id});break;
  case 'all':case 'inbox':case 'missed':return form({all:'All tasks',inbox:'Inbox',missed:'Unfinished from earlier'}[action],b('Add task','new')+(s().tasks.filter(t=>action==='all'||!t.archived&&t.status!=='done'&&(action==='inbox'?!t.date:t.date&&t.date<dayKey())).map(taskRow).join('')||'<p>No tasks here.</p>'),null);
- case 'complete':{const commandId=uid();const state=await dispatch({type:'task.toggle',id,status:'done',commandId});const event=state.activities.find(a=>a.commandId===commandId);close();flash('Task completed',event?b('Undo','undo',event.id):'');return;}
+ case 'complete':{const commandId=uid();const state=await dispatch({type:'task.toggle',id,status:'done',commandId});const event=state.activities.find(a=>a.commandId===commandId);if(event?.previous?.priority)root.querySelector('.rabbit')?.classList.add('rabbit-hop');close();flash('Task completed',event?b('Undo','undo',event.id):'');return;}
  case 'undo':await cmd('task.undo',{eventId:id});break;
  case 'reopen':await cmd('task.toggle',{id,status:'open'});break;
  case 'archive':await cmd('task.archive',{id});break;
@@ -90,7 +153,7 @@ async function act(action,id){
  case 'stuck':return form('What got in the way?',select('Obstacle','reason',choices(['Too big','Low energy','Blocked','Interrupted','No longer important','Skip']))+textarea('Progress or blocker','detail',task(id)?.fallback||''),
  data=>data.reason==='Skip'?Promise.resolve():guarded('task.progress',{id,detail:[data.reason,data.detail].filter(Boolean).join(' · ')}),'Record partial progress',b('Move or change scope','edit',id)+b('Drop commitment','drop',id));
  case 'drop':await guarded('task.save',{...task(id),date:'',time:'',remind:false});break;
- case 'focus-start':await cmd('focus.start',{id});break;
+ case 'focus-start':await cmd('focus.start',{id});root.querySelector('.rabbit')?.classList.add('rabbit-settle');break;
  case 'focus.finish':if(s().focus&&elapsedMs(s().focus)>86400000)return form('Finish interrupted session',field('Minutes actually worked','minutes','','number','required min="1" max="1440"'),data=>guarded('focus.finish',data),'Record session');await cmd(action);break;
  case 'focus.pause':case 'focus.resume':case 'focus.extend':await cmd(action);break;
  case 'dismiss':await cmd('preferences',{dismissedDay:dayKey()});break;
