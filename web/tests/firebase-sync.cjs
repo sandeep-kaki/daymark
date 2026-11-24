@@ -32,9 +32,15 @@ const run=Date.now();
   return p;
  }
  const a=await device('alice'+run,true), b=await device('alice'+run), outsider=await device('bob'+run);
- async function capture(p,title){await p.getByRole('button',{name:'Capture task'}).click();await p.getByLabel('Title',{exact:true}).fill(title);await p.locator('dialog button[type=submit]').click();await p.locator('dialog').waitFor({state:'hidden'});}
+ async function capture(p,title){await p.getByRole('button',{name:'Capture task'}).click();await p.getByLabel('Title',{exact:true}).fill(title);await p.locator('dialog button[type=submit]').click();await p.locator('#dialog').waitFor({state:'hidden'});}
  const has=(p,title)=>p.waitForFunction(async t=>(await import('./src/store.js')).snapshot().tasks.some(x=>x.title===t),title,{timeout:20000});
  await has(b,'Existing device task');await capture(a,'Synced task');await has(b,'Synced task');
+ await a.goto(origin+'/#Journal');await a.getByRole('button',{name:'Write an entry'}).click();
+ await a.getByLabel('Your entry').fill('A reflection from the first device');
+ await a.getByRole('button',{name:'Save entry'}).click();
+ await b.goto(origin+'/#Journal');
+ await b.getByText('A reflection from the first device',{exact:true}).waitFor();
+ await a.goto(origin+'/#Today');await b.goto(origin+'/#Today');
  await b.context().setOffline(true);await capture(b,'Offline edit');await capture(a,'Another device');await b.context().setOffline(false);await has(a,'Offline edit');await has(b,'Another device');
  assert.equal(await outsider.evaluate(async()=>(await import('./src/store.js')).snapshot().tasks.length),0);
  const [alice,bobToken]=await Promise.all([a.evaluate(()=>localStorage.getItem('daymark-sync-account')),outsider.evaluate(async()=>(await import('./src/cloud.js')).account().getIdToken())]);

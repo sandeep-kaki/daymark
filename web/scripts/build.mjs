@@ -6,7 +6,7 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 process.chdir(root);
 await mkdir('vendor',{recursive:true});
 await build({entryPoints:['cloud/firebase-entry.js'],outfile:'vendor/firebase.js',bundle:true,format:'esm',minify:true,legalComments:'inline',target:'es2022'});
-const files=['index.html','styles.css','icon.svg','manifest.webmanifest','src/app.js','src/cloud.js','src/domain.js','src/store.js','src/views.js','src/ui.js','src/sync-model.js','vendor/firebase.js'];
+const files=['index.html','styles.css','icon.svg','rabbit.png','manifest.webmanifest','src/app.js','src/cloud.js','src/domain.js','src/store.js','src/views.js','src/ui.js','src/sync-model.js','vendor/firebase.js'];
 const output=new URL('../dist/',import.meta.url);
 await mkdir(output,{recursive:true});
 for(const f of files){const dest=new URL(f,output);await mkdir(new URL('./',dest),{recursive:true});await cp(f,dest);}

@@ -163,7 +163,7 @@ export function applyCommand(input, command, now = new Date()) {
     case 'focus.extend': if(s.focus)s.focus.targetMinutes=(s.focus.targetMinutes||25)+5;break;
     case 'preferences': {
       if(c.theme&&!['light','dark','system'].includes(c.theme)) fail('Unknown theme.');
-      for(const key of ['theme','showRoutines','showTomorrow','coach','dismissedDay','prepTime','morningTime','quietStart','quietEnd','reminderDays']) if(c[key]!==undefined) s.preferences[key]=c[key]; break;
+      for(const key of ['theme','showRoutines','showTomorrow','showCompanion','coach','dismissedDay','prepTime','morningTime','quietStart','quietEnd','reminderDays']) if(c[key]!==undefined) s.preferences[key]=c[key]; break;
     }
     default: fail('Unknown action.');
   }

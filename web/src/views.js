@@ -2,9 +2,11 @@ import {dayKey,addDays,weekStart,routineProgress,elapsedMs} from './domain.js';
 import {esc as e,button as b,icon,displayDate,empty} from './ui.js';
 export const screens=['Today','Plan','Goals','Journal','Review'];
 const symbols=['sun','plan','goal','journal','review'];
+export function navigationLinks(page){
+ return screens.map((p,i)=>`<a href="#${p}" ${p===page?'aria-current="page"':''}>${icon(symbols[i])}${p}</a>`).join('');
+}
 export function shell(page,body){
- const links=screens.map((p,i)=>`<a href="#${p}" ${p===page?'aria-current="page"':''}>${icon(symbols[i])}${p}</a>`).join('');
- return `<aside><div class="brand"><span>◒</span> Daymark</div><nav aria-label="Workspace">${links}</nav><small>Personal workspace</small></aside><main><header><span>${e(page)}</span><div><small data-cloud-status></small>${b('Inbox','inbox','','quiet','inbox')}${b('Settings','settings','','quiet','settings')}</div></header><article>${body}</article></main><nav class="mobile" aria-label="Destinations">${links}</nav>`;
+ return `<main><header><div class="masthead"><button type="button" class="menu-button quiet" data-action="menu" aria-label="Open navigation" aria-haspopup="dialog" aria-controls="navigation">${icon('menu')}</button><a class="wordmark" href="#Today">Daymark</a><span class="current-page">${e(page)}</span></div><div class="account-tools"><small data-cloud-status></small>${b('Settings','settings','','quiet','settings')}</div></header><article>${body}</article></main><nav class="mobile" aria-label="Destinations">${navigationLinks(page)}</nav>`;
 }
 const title=(label,heading,actions='')=>`<section class="heading"><div><small>${e(label)}</small><h1>${e(heading)}</h1></div><div class="actions">${actions}</div></section>`;
 const section=(name,body,action='')=>`<section class="panel"><div class="line"><h2>${e(name)}</h2>${action}</div>${body}</section>`;
@@ -19,19 +21,39 @@ export function daily(s,day,plan){
  const open=tasks.filter(t=>t.status!=='done'),known=open.reduce((n,t)=>n+(t.estimate||0),0),unknown=open.filter(t=>!t.estimate).length;
  const blocks=open.filter(t=>t.time).sort((a,b)=>a.time.localeCompare(b.time));const start=t=>+t.time.slice(0,2)*60 + +t.time.slice(3);
  const overlap=blocks.some((t,i)=>blocks.slice(0,i).some(a=>start(a)+a.estimate>start(t)));
- const planActions=plan?b('Add task','dated')+b('Day settings','day-settings'):b('Capture task','new')+b('Log work','work');
+ const planActions=plan?b('Add task','dated')+b('Day settings','day-settings'):b('Capture task','new','','secondary','plus');
  let body=title(displayDate(day,{weekday:'long',month:'long',day:'numeric'}),plan?'Plan your day':day===today?'Today':'Tomorrow',planActions);
  body+=plan?`<label class="date">Plan for <input type="date" data-date="plan" value="${day}"></label>`:`<div class="switch">${b('Today','today','',day===today?'selected':'quiet')}${s.preferences.showTomorrow?b('Tomorrow','tomorrow','',day===today?'quiet':'selected'):''}</div>`;
- body+=`<section class="priority"><small>${icon('star')} DAILY PRIORITY</small><h2>${e(p?p.title:d.rest?'Rest day':plan?'What would make this day meaningful?':'Choose one thing that matters.')}</h2>${p?`${p.definition?muted('Done when · '+p.definition):''}${p.firstStep?`<div class="first"><small>First step</small>${e(p.firstStep)}</div>`:''}<div class="actions">${b('Complete','complete',p.id,'primary','check')}${b('Start','start',p.id)}${b("I’m stuck",'stuck',p.id)}${b('Edit','edit',p.id)}</div>`:`<div class="actions">${b('Choose one thing','choose','','primary','plus')}${!d.rest?b('Rest day','rest'):''}</div>`}</section>`;
+ const completedIds=new Set(tasks.filter(t=>t.status==='done').map(t=>t.id));
+ const finished=!plan&&!p&&!d.rest&&s.activities.findLast(a=>a.kind==='completed'&&a.previous?.priority&&a.day===day&&completedIds.has(a.entityId));
+ const heading=p?.title||(d.rest?'Rest day':finished?finished.label:plan?'What would make this day meaningful?':'Choose one thing that matters.');
+ const label=finished?'Priority completed':'Daily priority';
+ const companion=!plan&&s.preferences.showCompanion!==false;
+ const illustration=companion?'<img class="rabbit" src="./rabbit.png" alt="" width="180" height="180">':'';
+ let actions;
+ if(p){
+  actions=b('Start','start',p.id,'primary','play')+b('Complete','complete',p.id,'secondary','check')+b('I’m stuck','stuck',p.id)+b('Edit','edit',p.id);
+ }else if(finished){
+  actions=b('Write a reflection','note','','primary','journal')+b('Choose another priority','choose');
+ }else{
+  actions=b('Choose one thing','choose','','primary','plus')+(d.rest?'':b('Rest day','rest'));
+ }
+ body+=`<section class="priority ${companion?'with-companion':''}"><div class="priority-copy"><small>${icon(finished?'check':'star')} ${label}</small><h2>${e(heading)}</h2>${p?.definition?muted('Done when · '+p.definition):''}${p?.firstStep?`<div class="first"><small>First step</small>${e(p.firstStep)}</div>`:''}<div class="actions">${actions}</div></div>${illustration}</section>`;
  if(!d.rest&&s.preferences.coach!=='off'&&s.preferences.dismissedDay!==today){
  const deferrals=p?s.activities.filter(a=>a.kind==='rescheduled'&&a.entityId===p.id&&a.day>=addDays(today,-6)&&a.day<=today).length:0;
  const prompt=d.budget&&known>d.budget?'Your plan exceeds your time budget.':deferrals>=2?'You moved this priority twice this week. Would a smaller commitment fit?':p&&!p.firstStep?(s.preferences.coach==='direct'?'Choose your first action.':'A first step could make this easier to start.'):null;
  if(prompt)body+=`<div class="coach">${icon('spark')}<span>${prompt}</span>${b(p?'Adjust task':'Adjust budget',p?'edit':'day-settings',p?.id)}${b('Dismiss','dismiss')}</div>`;}
  if(overlap)body+=muted('Two planned time blocks overlap. Edit a task to adjust its start.');
- body+=section('Day checklist',muted(`${known} min estimated${d.budget?' / '+d.budget+' available':''}${unknown?' · '+unknown+' without estimates':''}`)+(tasks.filter(t=>t!==p).map(taskRow).join('')||muted('No supporting tasks for this day.')),b('Add task','dated'));
+ const supporting=tasks.filter(t=>t!==p);
+ if(plan||supporting.length){
+  const budget=plan?muted(`${known} min estimated${d.budget?' / '+d.budget+' available':''}${unknown?' · '+unknown+' without estimates':''}`):'';
+  body+=section('Day checklist',budget+(supporting.map(taskRow).join('')||muted('No supporting tasks for this day.')));
+ }
  if(s.focus){const f=s.focus;body+=section('Focus',`<strong>${e(s.tasks.find(t=>t.id===f.taskId)?.title)}</strong><p>${e(s.tasks.find(t=>t.id===f.taskId)?.firstStep)}</p><p><time id="elapsed">${Math.floor(elapsedMs(f)/60000)} min elapsed</time> · ${f.running?'Running':'Paused'}</p>${b(f.running?'Pause':'Resume',f.running?'focus.pause':'focus.resume')}${b('Extend 5 min','focus.extend')}${b('Finish session','focus.finish')}${b('Complete','complete',f.taskId)}`);}
- if(plan||s.preferences.showRoutines)body+=section('Routines',routines(s,day,plan),plan?b('New routine','routine'):'');
- return body+section('Your tasks',`<div class="actions">${b('Inbox','inbox')}${b('All tasks','all')}${b('Unfinished from earlier','missed')}</div>`);
+ const weekday=new Date(day+'T12:00').getDay();
+ if(plan||(s.preferences.showRoutines&&s.routines.some(r=>!r.paused&&(!r.weekdays?.length||r.weekdays.includes(weekday)))))body+=section('Routines',routines(s,day,plan),plan?b('New routine','routine'):'');
+ if(plan)return body+section('Your tasks',`<div class="actions">${b('Inbox','inbox')}${b('All tasks','all')}${b('Unfinished from earlier','missed')}</div>`);
+ return body+`<footer class="today-footer"><a href="#Plan">${icon('plan')} Open plan</a><a href="#Journal">${icon('journal')} Open journal</a></footer>`;
 }
 export function goals(s){
  return title('Longer-term direction','Goals',b('New goal','goal','','primary','plus'))+(s.goals.map(g=>section(g.title,muted(g.why)+muted([g.state||'active',g.date].filter(Boolean).join(' · '))+g.milestones.map(m=>`<div class="row"><span class="grow">${e(m.title)}${m.week?muted("Week of "+displayDate(m.week)):""}</span>${b("Revise","milestone-edit",m.id)}${b(m.done?'Achieved':'Mark achieved','milestone-toggle',m.id)}</div>`).join('')+`<div class="actions">${b('Add milestone','milestone',g.id)}${b('Edit goal','goal',g.id)}${b('Update status','goal-state',g.id)}</div>`+evidence(s,g.id))).join('')||empty('What would you like to work toward?','Choose an outcome you’ll recognize when it happens.','goal','Create a goal','goal'));

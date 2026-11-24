@@ -2,9 +2,9 @@ import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL(process.env.DAYMARK_SERVE_DIST === '1' ? '../dist/' : '../', import.meta.url));
 const port = Number(process.env.PORT || 4174);
-const types = {'.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.svg':'image/svg+xml', '.webmanifest':'application/manifest+json', '.json':'application/json'};
+const types = {'.png':'image/png','.html':'text/html', '.js':'text/javascript', '.css':'text/css', '.svg':'image/svg+xml', '.webmanifest':'application/manifest+json', '.json':'application/json'};
 const server = http.createServer(async (req, res) => {
   try {
     if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }

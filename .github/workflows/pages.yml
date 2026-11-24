@@ -30,9 +30,26 @@ jobs:
         env:
           DAYMARK_FIREBASE_CONFIG: ${{ vars.DAYMARK_FIREBASE_CONFIG }}
           REQUIRE_CLOUD: '1'
+      - name: Install Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium --only-shell
+      - name: Exercise the built app in a browser
+        working-directory: web
+        run: npm run test:browser
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Verify Google workspace sync in Firebase emulators
+        run: npx --yes firebase-tools@15.37.0 emulators:exec --only auth,firestore --project demo-daymark-sync "node web/tests/firebase-sync.cjs"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Check the published URL in a clean browser
+        working-directory: web
+        env:
+          DAYMARK_TEST_URL: ${{ steps.deployment.outputs.page_url }}
+        run: npm run test:browser

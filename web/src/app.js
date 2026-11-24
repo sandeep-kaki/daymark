@@ -2,10 +2,16 @@ import {initializeAccount,startSync,account,configured,syncStatus,connect,discon
 import {openStore,draftPrefix,snapshot,dispatch,subscribe,replaceWorkspace,exportWorkspace} from './store.js';
 import {dayKey,addDays,emptyState,parseBackup,elapsedMs,uid} from './domain.js';
 import {field,textarea,select,button as b,esc as e,goalSelect} from './ui.js';
-import {shell,screens,daily,goals,journal,review,taskRow} from './views.js';
+import {shell,screens,daily,goals,journal,review,taskRow,navigationLinks} from './views.js';
 const root=document.querySelector('#app'), dialog=document.querySelector('dialog'), toast=document.querySelector('#toast');
 let offset=0, planDay=addDays(dayKey(),1), reviewDay=dayKey(),period='week',saving=false,submit,revision,timeout,previousFocus,lastDay=dayKey();
 const page=()=>screens.includes(location.hash.slice(1))?location.hash.slice(1):'Today';
+const drawer=document.querySelector('#navigation');
+drawer.addEventListener('click',ev=>{
+ if(ev.target===drawer || ev.target.closest('button,a'))drawer.close();
+});
+drawer.addEventListener('close',()=>root.querySelector('[data-action="menu"]')?.focus());
+matchMedia('(max-width:720px)').addEventListener('change',()=>{if(drawer.open)drawer.close();});
 const day=()=>page()==='Plan'?planDay:addDays(dayKey(),offset);
 const s=()=>snapshot(), task=id=>s().tasks.find(t=>t.id===id);
 const cmd=(type,fields={})=>dispatch({type,...fields,commandId:uid()});
@@ -44,7 +50,7 @@ const required='required maxlength="180"',number='min="1" max="1440"', choices=a
 const guarded=(type,data)=>cmd(type,{...data,expectedRevision:revision});
 function taskForm(id='',date='',primary=false){const t=task(id)||{};
  form(id?'Task details':primary?'Choose your priority':'New task',field('Title','title',t.title,'text',required)+field('Planned day','date',t.date??date,'date',primary?'required':'')+
- `<details ${id||primary?'open':''}><summary>Planning details</summary>`+textarea('Definition of done','definition',t.definition)+field('First action','firstStep',t.firstStep)+field('Start cue','cue',t.cue)+field('Fallback','fallback',t.fallback)+field('Preparation','preparation',t.preparation)+field('Estimated minutes','estimate',t.estimate,'number',number)+field('Start time','time',t.time,'time')+select('Remind at start while open','remind',choices(['No','Yes']),t.remind?'Yes':'No')+field('Deadline','deadline',t.deadline,'date')+goalSelect(s(),t.goalId)+select('Milestone · optional','milestoneId',[['','No milestone'],...s().goals.flatMap(g=>g.milestones.map(m=>[m.id,g.title+' · '+m.title]))],t.milestoneId)+textarea('Notes','notes',t.notes)+'</details>',
+ (primary?field('First action','firstStep',t.firstStep):'')+`<details ${id?'open':''}><summary>Planning details</summary>`+textarea('Definition of done','definition',t.definition)+(primary?'':field('First action','firstStep',t.firstStep))+field('Start cue','cue',t.cue)+field('Fallback','fallback',t.fallback)+field('Preparation','preparation',t.preparation)+field('Estimated minutes','estimate',t.estimate,'number',number)+field('Start time','time',t.time,'time')+select('Remind at start while open','remind',choices(['No','Yes']),t.remind?'Yes':'No')+field('Deadline','deadline',t.deadline,'date')+goalSelect(s(),t.goalId)+select('Milestone · optional','milestoneId',[['','No milestone'],...s().goals.flatMap(g=>g.milestones.map(m=>[m.id,g.title+' · '+m.title]))],t.milestoneId)+textarea('Notes','notes',t.notes)+'</details>',
  data=>guarded('task.save',{...data,id,primary,remind:data.remind==='Yes'}),primary?'Save priority':'Save task',id?`<div class="actions tools">${!t.archived&&t.status!=='done'?b('Start','start',id)+b('Focus','focus-start',id)+b('Make priority','promote',id)+b('I’m stuck','stuck',id):''}${b(t.archived?'Restore':'Archive','archive',id)}${b('Delete','delete-task',id)}</div>`:'');}
 function noteForm(id,kind='entry'){const n=s().notes.find(x=>x.id===id)||{};const key=draftPrefix()+(id||kind);let draft={};
  try{draft=JSON.parse(localStorage.getItem(key)||'{}');}catch{}
@@ -53,18 +59,24 @@ function noteForm(id,kind='entry'){const n=s().notes.find(x=>x.id===id)||{};cons
  dialog.querySelector('form').oninput=ev=>{try{localStorage.setItem(key,JSON.stringify(Object.fromEntries(new FormData(ev.currentTarget))));}catch{dialog.querySelector('[role=alert]').textContent='Draft recovery unavailable. Save this entry before leaving.';}};}
 function download(){const blob=new Blob([JSON.stringify({format:'daymark-workspace',schemaVersion:1,exportedAt:new Date().toISOString(),payload:JSON.parse(exportWorkspace())},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='daymark-'+dayKey()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 function clearDrafts(){for(const k of Object.keys(localStorage))if(k.startsWith(draftPrefix()))localStorage.removeItem(k);}
-function settings(){const p=s().preferences;form('Settings',select('Theme','theme',choices(['system','light','dark']),p.theme)+select('Coach','coach',choices(['off','gentle','direct']),p.coach||'gentle')+
- select('Show tomorrow shortcut','showTomorrow',choices(['Yes','No']),p.showTomorrow?'Yes':'No')+select('Show routines on Today','showRoutines',choices(['Yes','No']),p.showRoutines?'Yes':'No')+
+function settings(){const p=s().preferences;
+ const themes=['System','Light','Dark'].map(name=>{
+  const value=name.toLowerCase();
+  return `<label><input type="radio" name="theme" value="${value}" ${(p.theme||'system')===value?'checked':''}><span class="theme-swatch swatch-${value}" aria-hidden="true"></span>${name}</label>`;
+ }).join('');
+ form('Settings','<fieldset class="theme-options"><legend>Appearance</legend>'+themes+'</fieldset>'+select('Coach','coach',choices(['off','gentle','direct']),p.coach||'gentle')+
+ '<label class="companion-setting"><input type="checkbox" name="showCompanion" '+(p.showCompanion===false?'':'checked')+'> Show the rabbit companion</label>'+select('Show tomorrow shortcut','showTomorrow',choices(['Yes','No']),p.showTomorrow?'Yes':'No')+select('Show routines on Today','showRoutines',choices(['Yes','No']),p.showRoutines?'Yes':'No')+
  '<details><summary>In-app reminders</summary><p>Leave the time blank to turn a reminder off. Reminders appear while Daymark is open.</p>'+field('Preparation','prepTime',p.prepTime,'time')+field('Morning','morningTime',p.morningTime,'time')+field('Quiet hours start','quietStart',p.quietStart||'22:00','time')+field('Quiet hours end','quietEnd',p.quietEnd||'07:00','time')+'</details>',
- data=>guarded('preferences',{...data,showTomorrow:data.showTomorrow==='Yes',showRoutines:data.showRoutines==='Yes'}),'Save settings',
+ data=>guarded('preferences',{...data,showCompanion:data.showCompanion==='on',showTomorrow:data.showTomorrow==='Yes',showRoutines:data.showRoutines==='Yes'}),'Save settings',
  '<hr><section data-sync-panel>'+storagePanel()+'</section><details><summary>File transfer and deletion</summary>'+b('Download backup','export')+'<label class="field">Restore a backup<input type="file" id="restore-file" accept=".json,application/json"></label>'+b('Delete workspace','wipe')+'</details>');}
 function routines(id){const r=s().routines.find(r=>r.id===id)||{};
  form(id?'Edit routine':'New routine',field('Routine','title',r.title,'text',required)+select('Measure','kind',choices(['count','minutes','check']),r.kind)+select('Frequency','period',choices(['daily','weekly']),r.period)+field('Target per period','target',r.target||1,'number','required min="1"')+field('Standard amount','step',r.step||1,'number','required min="1"')+field('Minimum version','minimum',r.minimum)+field('Unit','unit',r.unit||'times')+field('Cue','cue',r.cue)+`<fieldset><legend>Scheduled weekdays (optional)</legend>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d,i)=>`<label><input type="checkbox" name="w${i}" ${r.weekdays?.includes(i)?'checked':''}>${d}</label>`).join('')}</fieldset>`+goalSelect(s(),r.goalId),data=>guarded('routine.save',{...data,id,weekdays:[0,1,2,3,4,5,6].filter(i=>data['w'+i])}),'Save routine',id?b(r.paused?'Resume routine':'Pause routine','routine-pause',id):'');}
 async function act(action,id){
  switch(action){
+ case 'menu':drawer.querySelector('nav').innerHTML=navigationLinks(page());drawer.showModal();return;
  case 'close':return close();case 'today':case 'tomorrow':offset=Number(action==='tomorrow');return render();
  case 'new':case 'dated':case 'edit':case 'new-primary':return taskForm(id,action==='dated'||action==='new-primary'?day():'',action==='new-primary');
- case 'choose':return form('Choose one thing',b('Create a new priority','new-primary')+s().tasks.filter(t=>!t.archived&&t.status!=='done').map(t=>b(t.title+' · '+(t.date||'Inbox'),'pick',t.id)).join(''),null);
+ case 'choose':if(!s().tasks.some(t=>!t.archived&&t.status!=='done'))return taskForm('',day(),true);return form('Choose one thing',b('Create a new priority','new-primary')+s().tasks.filter(t=>!t.archived&&t.status!=='done').map(t=>b(t.title+' · '+(t.date||'Inbox'),'pick',t.id)).join(''),null);
  case 'pick':return taskFormForDay(id);
  case 'promote':await cmd('task.priority',{id});break;
  case 'all':case 'inbox':case 'missed':return form({all:'All tasks',inbox:'Inbox',missed:'Unfinished from earlier'}[action],b('Add task','new')+(s().tasks.filter(t=>action==='all'||!t.archived&&t.status!=='done'&&(action==='inbox'?!t.date:t.date&&t.date<dayKey())).map(taskRow).join('')||'<p>No tasks here.</p>'),null);
