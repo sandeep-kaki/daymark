@@ -32,6 +32,9 @@ function routines(s,day,manage){
  return s.routines.filter(r=>manage||!r.paused&&(!r.weekdays?.length||r.weekdays.includes(new Date(day+'T12:00').getDay()))).map(r=>{
  const p=routineProgress(s,r,day);return `<div class="row"><div class="grow"><strong>${e(r.title)}</strong><small>${r.paused?'Paused · ':r.restDays?.includes(day)?'Rest · ':''}${p.value} / ${r.target} ${e(r.unit)} · ${r.period}${r.minimum?' · Minimum '+e(r.minimum):''}</small></div>${!r.paused?b('Log','log-routine',r.id):''}${manage?b('Edit','routine',r.id):''}</div>`;}).join('')||muted('No routines scheduled.');
 }
+function calendarButton(scope,day,label,text,period='day'){
+ return `<button type="button" class="plan-picker" data-calendar="${scope}" data-day-value="${day}" data-unit="${period}" aria-haspopup="dialog" aria-controls="daymark-calendar" aria-label="${e(label+' '+text)}">${icon('plan')}<span>${e(text)}</span>${icon('chevron','picker-caret')}</button>`;
+}
 export function daily(s,day,plan,cue){
  const today=dayKey(), tasks=s.tasks.filter(t=>t.date===day&&!t.archived), p=tasks.find(t=>t.priority&&t.status!=='done'),d=s.days?.[day]||{};
  const open=tasks.filter(t=>t.status!=='done'),known=open.reduce((n,t)=>n+(t.estimate||0),0),unknown=open.filter(t=>!t.estimate).length;
@@ -41,7 +44,7 @@ export function daily(s,day,plan,cue){
  let body=(plan?'':'<section class="morning-panel">')+title(displayDate(day,{weekday:'long',month:'long',day:'numeric'}),plan?'Plan your day':day===today?'Your morning.':'Tomorrow',planActions);
  if(!plan)body+='<form class="quick-task"><input name="title" required maxlength="180" aria-label="New task for this day" placeholder="What matters today?"><button class="primary" type="submit">Add</button></form>';
  if(plan)body+=pipLine(s.preferences.showCompanion!==false,'listen',open.length?`You have ${open.length} open ${open.length===1?'task':'tasks'} planned. Make room for the first one.`:'What could you set up now to make this day easier?','Plan');
- body+=plan?`<div class="date"><button type="button" class="plan-picker" data-plan-picker="${day}" aria-haspopup="dialog" aria-controls="plan-calendar" aria-label="Plan for ${e(displayDate(day,{dateStyle:'full'}))}">${icon('plan')}<span>${e(displayDate(day,{month:'short',day:'numeric',year:'numeric'}))}</span>${icon('chevron','picker-caret')}</button></div>`:`<div class="switch">${b('Today','today','',day===today?'selected':'quiet')}${s.preferences.showTomorrow?b('Tomorrow','tomorrow','',day===today?'quiet':'selected'):''}</div>`;
+ body+=plan?`<div class="date">${calendarButton('plan',day,'Plan for',displayDate(day,{month:'short',day:'numeric',year:'numeric'}))}</div>`:`<div class="switch">${b('Today','today','',day===today?'selected':'quiet')}${s.preferences.showTomorrow?b('Tomorrow','tomorrow','',day===today?'quiet':'selected'):''}</div>`;
  const completedIds=new Set(tasks.filter(t=>t.status==='done').map(t=>t.id));
  const finished=!plan&&!p&&!d.rest&&s.activities.findLast(a=>a.kind==='completed'&&a.previous?.priority&&a.day===day&&completedIds.has(a.entityId));
  const captured=cue?.day===day?s.tasks.find(t=>t.id===cue.id&&!t.archived):null;
@@ -93,7 +96,11 @@ export function journal(s){return title('Activity and reflection','Journal',b('L
 export function review(s,day,period){
  const from=period==='week'?weekStart(day):period==='month'?day.slice(0,7)+'-01':day,to=period==='week'?addDays(from,6):period==='month'?dayKey(new Date(+day.slice(0,4),+day.slice(5,7),0)):day;
  const within=x=>x.day>=from&&x.day<=to;
- return title('Look back','Review',b(period==='month'?'Reassess a goal':'Record an experiment','experiment'))+`<div class="switch"><select aria-label="Review period" data-period>${['day','week','month'].map(x=>`<option ${period===x?'selected':''}>${x}</option>`).join('')}</select><input aria-label="Review date" type="date" data-date="review" value="${day}"></div>`+
+ const dateText=period==='week'?new Intl.DateTimeFormat(undefined,{year:'numeric',month:'short',day:'numeric'}).formatRange(new Date(from+'T12:00'),new Date(to+'T12:00')):
+  displayDate(day,period==='month'?{month:'long',year:'numeric'}:{month:'short',day:'numeric',year:'numeric'});
+ const periods=['day','week','month'].map(unit=>`<label><input type="radio" name="review-period" value="${unit}" ${unit===period?'checked':''}><span>${unit[0].toUpperCase()+unit.slice(1)}</span></label>`).join('');
+ return title('Look back','Review',b(period==='month'?'Reassess a goal':'Record an experiment','experiment'))+
+  `<div class="switch review-controls"><fieldset class="review-period"><legend class="visually-hidden">Review period</legend>${periods}</fieldset>${calendarButton('review',day,'Review '+period,dateText,period)}</div>`+
  pipLine(s.preferences.showCompanion!==false,'rest',s.activities.some(a=>a.kind==='completed'&&within(a))?'Completed this period · '+s.activities.findLast(a=>a.kind==='completed'&&within(a)).label:'What worked this period that you’d like to repeat?','Review')+
  section('Goals and milestones',s.goals.map(g=>`<div class="record"><strong>${e(g.title)}</strong>${muted(g.milestones.map(m=>(m.done?'✓ ':'○ ')+m.title).join(' · ')||'No milestones yet')}${evidence({...s,activities:s.activities.filter(within)},g.id)}</div>`).join('')||muted('No goals yet.'))+
  section('Activity · '+displayDate(from)+' – '+displayDate(to),[...s.activities].filter(within).reverse().map(fact).join('')||muted('No recorded activity for this period.'))+

@@ -27,8 +27,8 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  assert.equal(await p.getByLabel('Estimated minutes').isVisible(),false);await btn('Close').click();
  await btn('Capture task').click();await fill('Title','Unrelated idea');await saved('Save task');
  await p.getByRole('link',{name:'Open plan',exact:true}).click();
- const picker=p.locator('[data-plan-picker]'),calendar=p.locator('#plan-calendar');
- await picker.click();const initial=await picker.getAttribute('data-plan-picker');
+ const picker=p.locator('[data-calendar=plan]'),calendar=p.locator('#daymark-calendar');
+ await picker.click();const initial=await picker.getAttribute('data-day-value');
  const nextMonth=btn('Next month'),previousMonth=btn('Previous month');
  const panelBox=await calendar.boundingBox(),monthRows=new Set();
  for(const arrow of [nextMonth,previousMonth]){
@@ -45,11 +45,11 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  }
  assert(monthRows.has(5)&&monthRows.has(6));
  await p.keyboard.press('Escape');
- assert.equal(await picker.getAttribute('data-plan-picker'),initial);
+ assert.equal(await picker.getAttribute('data-day-value'),initial);
  await picker.click();await p.keyboard.press('PageDown');await p.keyboard.press('ArrowRight');
  const chosen=await p.locator(':focus').getAttribute('data-day');assert(chosen&&chosen!==initial);
  await p.keyboard.press('Enter');await calendar.waitFor({state:'hidden'});
- assert.equal(await picker.getAttribute('data-plan-picker'),chosen);
+ assert.equal(await picker.getAttribute('data-day-value'),chosen);
  await btn('Add task').click();assert.equal(await p.locator('#dialog input[name=date]').inputValue(),chosen);await btn('Close').click();
  await route('Today');await p.getByRole('link',{name:'Open journal',exact:true}).click();await btn('Write an entry').waitFor();
  await route('Goals');await btn('New goal').click();await fill('Title','Publish a useful course lesson');await fill('Observable outcome','A lesson ready to share');await saved('Save');
@@ -61,6 +61,20 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  await route('Review');assert.ok((await p.locator('article').innerText()).includes('Unexpected editing session'));
  await p.evaluate(()=>navigator.serviceWorker.ready);await p.waitForFunction(()=>!!navigator.serviceWorker.controller);await context.setOffline(true);await p.reload();await p.locator('article').waitFor();
  for(const name of ['Today','Plan','Goals','Journal','Review']){await route(name);assert.equal(await p.locator('header .current-page').innerText(),name);assert.equal(await p.locator('main .pip').count(),1);}
+ const reviewPeriod=p.getByRole('group',{name:'Review period'}),reviewPicker=p.locator('[data-calendar=review]');
+ assert(await reviewPeriod.getByRole('radio',{name:'Week'}).isChecked());
+ await reviewPicker.click();assert.equal(await calendar.locator('.in-week').count(),7);await p.keyboard.press('Escape');
+ await reviewPeriod.getByText('Month',{exact:true}).click();await reviewPicker.click();
+ assert.equal(await calendar.locator('.month-options button').count(),12);
+ const year=Number(await calendar.locator('h2').textContent());await btn('Previous year').click();
+ await calendar.locator('[data-day="'+(year-1)+'-12-01"]').click();
+ assert.equal(await reviewPicker.getAttribute('data-day-value'),(year-1)+'-12-01');
+ await reviewPeriod.getByText('Day',{exact:true}).click();await reviewPicker.click();
+ await calendar.locator('[data-day="'+(year-1)+'-12-31"]').click();
+ await reviewPeriod.getByText('Week',{exact:true}).click();await reviewPicker.click();
+ assert.equal(await calendar.locator('.in-week').count(),7);
+ await btn('Go to this week').click();
+ assert.ok((await p.locator('article').innerText()).includes('Unexpected editing session'));
  const reopened=await context.newPage();await reopened.goto(new URL('#Journal',origin).href);await reopened.getByText('Writing the outline helped',{exact:true}).waitFor();await reopened.close();
  await context.setOffline(false);await btn('Settings').click();await p.getByText('File transfer and deletion',{exact:true}).click();const download=p.waitForEvent('download');await btn('Download backup').click();const path=await (await download).path();
  const clean=await browser.newContext();const other=await clean.newPage();await other.goto(origin);await other.getByRole('button',{name:'Skip for now'}).click();await other.getByRole('button',{name:'Settings',exact:true}).click();await other.getByText('File transfer and deletion',{exact:true}).click();await other.locator('#restore-file').setInputFiles(path);await other.getByRole('button',{name:'Replace workspace',exact:true}).click();await other.getByRole('heading',{name:'Draft three sections'}).waitFor();assert.equal(errors.length,0);

@@ -4,12 +4,12 @@ import {dayKey,addDays,emptyState,parseBackup,elapsedMs,uid} from './domain.js';
 import {field,textarea,select,button as b,icon,esc as e,goalSelect} from './ui.js';
 import {applyAppearance,setAppearance,appearanceSettings,toggleMode} from './appearance.js';
 import {pip,pipLine} from './pip.js';
-import {installPlanCalendar} from './plan-calendar.js';
+import {installCalendar} from './plan-calendar.js';
 import {shell,screens,daily,goals,journal,review,taskRow,navigationLinks} from './views.js';
 const root=document.querySelector('#app'), dialog=document.querySelector('dialog'), toast=document.querySelector('#toast');
 let offset=0, planDay=addDays(dayKey(),1), reviewDay=dayKey(),period='week',saving=false,submit,revision,timeout,previousFocus,lastDay=dayKey();
 const page=()=>screens.includes(location.hash.slice(1))?location.hash.slice(1):'Today';
-installPlanCalendar(date=>{planDay=date;render();});
+installCalendar((scope,date)=>{if(scope==='review')reviewDay=date;else planDay=date;render();});
 const drawer=document.querySelector('#navigation');
 const phoneNav=document.querySelector('.phone-tabs'),lens=phoneNav.querySelector('.tab-lens');
 const phoneWidth=matchMedia('(max-width:720px)');
@@ -336,7 +336,7 @@ root.addEventListener('submit',async ev=>{
   if(readQuickDraft(submittedScope)===submittedValue){writeQuickDraft(submittedScope,'');if(field?.dataset.scope===submittedScope){field.value='';field.focus({preventScroll:true});}}gesture('listen');flash('Task added');
  }catch(err){flash(err.message);}finally{saving=false;}
 });
-document.addEventListener('change',async ev=>{const el=ev.target;if(el.dataset.appearance){try{setAppearance(el.dataset.appearance,el.value);}catch{applyAppearance();flash('Could not save the appearance on this device.');}return;}if(el.dataset.date==='review'&&el.value){reviewDay=el.value;render();}if(el.hasAttribute('data-period')){period=el.value;render();}
+document.addEventListener('change',async ev=>{const el=ev.target;if(el.dataset.appearance){try{setAppearance(el.dataset.appearance,el.value);}catch{applyAppearance();flash('Could not save the appearance on this device.');}return;}if(el.name==='review-period'){period=el.value;render();root.querySelector('[name=review-period]:checked')?.focus({preventScroll:true});}
  if(el.id==='restore-file'&&el.files[0]){try{if(el.files[0].size>10485760)throw Error('Choose a backup smaller than 10 MB.');const data=parseBackup(await el.files[0].text());form('Replace this workspace?',`<p>Incoming backup: ${data.tasks.length} tasks, ${data.goals.length} goals and ${data.notes.length} entries. Restored timers will be paused.</p>`+b('Download current workspace','export'),async()=>{await replaceWorkspace(data,revision);clearDrafts();},'Replace workspace');}catch(err){dialog.querySelector('[role=alert]').textContent=err.message;}}});
 async function tick(){const today=dayKey();if(lastDay!==today){lastDay=today;if(!dialog.open)render();}const f=s()?.focus,clock=document.querySelector('#elapsed');if(clock&&f)clock.textContent=Math.floor(elapsedMs(f)/60000)+' min '+Math.floor(elapsedMs(f)/1000)%60+' sec elapsed · '+Math.max(0,Math.ceil((f.targetMinutes||25)-elapsedMs(f)/60000))+' min remaining';
  const due=s()?.tasks.find(t=>t.remind&&!t.archived&&t.status!=='done'&&t.deliveredKey!==t.reminderKey&&t.date===today&&Math.abs(Date.now()-new Date(t.date+'T'+t.time).getTime()-30000)<30000);
