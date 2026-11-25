@@ -64,7 +64,8 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  const guide=await learner.newPage();
  const press=name=>guide.getByRole('button',{name,exact:true}).click();
  await guide.goto(origin);
- await guide.getByRole('heading',{name:'What matters today?'}).waitFor();
+ await guide.getByRole('heading',{name:'Pick a starting point'}).waitFor();
+ await press('Learning');await press('Read a chapter');assert.equal(await guide.getByLabel('Priority',{exact:true}).inputValue(),'Read a chapter');
  await guide.getByLabel('Priority',{exact:true}).fill('Prepare a lesson');
  await press('Pause guide');await guide.reload();await press('Resume first-day guide');
  assert.equal(await guide.getByLabel('Priority',{exact:true}).inputValue(),'Prepare a lesson');
@@ -74,7 +75,7 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  await press('Start my day');await guide.locator('#dialog').waitFor({state:'hidden'});await guide.reload();
  await guide.getByRole('heading',{name:'Prepare a lesson',exact:true}).waitFor();
  assert.equal(await guide.getByRole('button',{name:'Resume first-day guide'}).count(),0);
- await press('Settings');await press('First-day guide');await guide.getByRole('heading',{name:'What matters today?'}).waitFor();
+ await press('Settings');await press('First-day guide');await guide.getByRole('heading',{name:'Pick a starting point'}).waitFor();
  assert.equal(await guide.evaluate(async()=>(await import('./src/store.js')).snapshot().tasks.length),2);
  await learner.close();
  // An isolated device exercises Appearance and Pip without altering the other test workspaces.
@@ -99,7 +100,9 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  assert.equal(await appearancePage.locator('.pip').getAttribute('data-pose'),'greet');
  if(process.env.DAYMARK_SCREENSHOTS)await appearancePage.screenshot({path:require('node:path').join(process.env.DAYMARK_SCREENSHOTS,'pip-capture.png')});
  await tap('Start');await tap('Open focus timer');
- await appearancePage.locator('.pip[data-pose=focus]').waitFor();
+ await appearancePage.locator('.priority .pip[data-pose=focus]').waitFor();
+ assert.equal(await appearancePage.locator('.priority .pip-ear').first().evaluate(el=>getComputedStyle(el).animationDuration),'2.6s');
+ assert.equal(await appearancePage.locator('.pip-tail').evaluate(el=>getComputedStyle(el).animationName),'pip-tail-flick');
  assert.equal(await appearancePage.locator('.pip:visible').count(),1);
  await tap('Finish session');
  await tap('Complete Call Maya about Friday');
@@ -110,7 +113,7 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  assert(await appearancePage.getByRole('radio',{name:'Garnet',exact:true}).isChecked());
  for(const palette of ['Garnet','Mist & Indigo','Oat & Moss','Apricot & Clay']){
   await choose('Palette',palette);
-  for(const mode of ['Light','Dark']){await choose('Color mode',mode);assert.equal(await appearancePage.locator('html').evaluate(el=>getComputedStyle(el).colorScheme),mode.toLowerCase());}
+  for(const mode of ['Light','Dark']){await choose('Color mode',mode);assert.equal(await appearancePage.locator('html').evaluate(el=>getComputedStyle(el).colorScheme),mode.toLowerCase());const chip=appearancePage.getByRole('radio',{name:palette,exact:true});await chip.hover();await appearancePage.waitForFunction(()=>getComputedStyle(document.querySelector('label:hover:has([data-appearance=palette])')).boxShadow.includes('9px'));}
  }
  for(const font of ['Clean sans','Reading serif','Daymark']){
   await choose('Font style',font);assert.equal(await appearancePage.locator('html').getAttribute('data-font'),font);

@@ -74,14 +74,11 @@ body:has(#dialog[open],#navigation[open]) main .pip { visibility:hidden; }
 @media (prefers-reduced-motion:no-preference) {
  .pip-note { animation:pip-unfold .42s ease-out; }
  @keyframes pip-unfold { from { transform:perspective(200px) rotateY(-30deg); } }
- .pip[data-pose=welcome] .pip-ear,.pip[data-pose=listen] .pip-ear { animation:pip-listen .46s ease-in-out; }
- .pip[data-pose=welcome] .pip-ear.far,.pip[data-pose=greet] .pip-ear.far { animation:pip-wave .58s ease-in-out; }
+
+
  .pip[data-pose=nod] .pip-head,.pip[data-pose=focus] .pip-head { animation:pip-nod .54s ease-in-out; }
- .pip[data-pose=greet] .pip-eyes,.pip[data-pose=nod] .pip-eyes { animation:pip-blink .5s ease-in-out; }
- @keyframes pip-listen { 50% { transform:rotate(-12deg); } }
- @keyframes pip-wave { 40% { transform:rotate(16deg); } 72% { transform:rotate(5deg); } }
+
  @keyframes pip-nod { 50% { transform:translateY(2px) rotate(4deg); } }
- @keyframes pip-blink { 45%,55% { transform:scaleY(.14); } }
 }
 @media(max-width:720px) {
  .account-tools { min-width:0; } .masthead { flex-shrink:0; }
@@ -129,8 +126,11 @@ nav a[aria-current]::before { content:"";position:absolute;inset:0;background:va
  @keyframes nav-slide { from { transform:translate(var(--slide-x),var(--slide-y)); } }
  article.arriving { animation:page-arrive .26s cubic-bezier(.16,1,.3,1); }
  @keyframes page-arrive { from { opacity:.65;transform:translateY(6px); } }
- .pip[data-pose=rest] .pip-ear.far,.pip[data-pose=arrive] .pip-ear.far { animation:pip-perk 6.8s ease-in-out infinite; }
- .pip:is([data-pose=rest],[data-pose=welcome],[data-pose=listen],[data-pose=arrive]) .pip-eyes { animation:pip-idle-blink 5.2s infinite; }
+ .pip .pip-ear { animation:pip-perk 2.6s ease-in-out infinite; }
+ .pip .pip-ear.far { animation:pip-perk 2.6s .16s ease-in-out infinite reverse; }
+ .pip-tail { transform-origin:71px 88px; animation:pip-tail-flick 5.2s ease-in-out infinite; }
+ @keyframes pip-tail-flick { 0%,78%,94%,100% { transform:none; } 82%,89% { transform:rotate(-14deg) scale(1.07); } 86% { transform:rotate(5deg); } }
+ .pip .pip-eyes { animation:pip-idle-blink 5.2s infinite; }
  .pip[data-pose=welcome] .pip-body,.pip[data-pose=arrive] .pip-body { animation:pip-hop-in .75s both; }
  .pip[data-pose=nod] .pip-body,.pip[data-pose=greet] .pip-body { animation:pip-hop .65s both; }
  .pip[data-pose=listen] .pip-body { animation:pip-lean .7s ease-in-out; }
@@ -145,4 +145,35 @@ nav a[aria-current]::before { content:"";position:absolute;inset:0;background:va
  .quick-task:focus-within { outline:2px solid Highlight; }
  .preference-toggle input { appearance:auto; }
  nav a[aria-current] { outline:1px solid Highlight; }
+}
+
+.priority.pip-perch { display:grid;grid-template-columns:minmax(0,1fr) clamp(65px,14vw,136px);align-items:center;gap:clamp(8px,2vw,24px); }
+.pip-perch .priority-copy { min-width:0;overflow-wrap:anywhere; }
+.pip-perch button.pip.rabbit { width:100%;border-radius:42%; }
+@media(max-width:480px) {
+ .pip-perch .priority-copy { display:contents; }
+ .pip-perch .priority-copy > :is(small,h2) { grid-column:1; }
+ .pip-perch button.pip.rabbit { grid-column:2;grid-row:1 / 3; }
+ .pip-perch .priority-copy > :is(.actions,.pip-guidance,.muted) { grid-column:1 / -1; }
+ .pip-perch .actions,.pip-perch .pip-guidance { margin-top:.35rem; }
+ .pip-perch .priority-copy h2 { overflow-wrap:anywhere; }
+}
+.starter-topics,.starter-ideas { display:flex;flex-wrap:wrap;gap:6px; }
+.starter-ideas:not(:empty) { margin-top:12px; }
+.starter-topics .topic { border-radius:99px;padding-inline:.9rem; }
+.starter-ideas .idea { text-align:left;overflow-wrap:anywhere;max-width:100%; }
+.starter-topics [aria-pressed=true],.starter-ideas [aria-pressed=true] { color:var(--brand);background:var(--tint);border-color:var(--brand); }
+:root {
+ --halo-color:light-dark(#4c5256,#e3e8eb);
+ --control-halo:0 0 0 1px color-mix(in srgb,var(--halo-color) 24%,transparent),0 0 9px 1px color-mix(in srgb,var(--halo-color) 13%,transparent);
+}
+@media (hover:hover) and (pointer:fine) {
+ :is(button:enabled,a[href],summary,select:enabled,textarea:enabled,input:enabled):hover,
+ .appearance-group label:hover,.quick-task:has(input:hover) { box-shadow:var(--control-halo); }
+ .quick-task input:hover,.appearance-group input:hover { box-shadow:none; }
+ .appearance-group label:has(:checked):hover { box-shadow:inset 0 0 0 1px var(--brand),var(--control-halo); }
+ .quick-task:focus-within { border-color:var(--brand); }
+}
+@media (prefers-reduced-motion:no-preference) {
+ :where(button,a[href],summary,select,input,textarea,.appearance-group label) { transition:box-shadow .16s ease-out; }
 }

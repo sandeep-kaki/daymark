@@ -35,10 +35,10 @@ export function daily(s,day,plan,cue){
  const heading=p?.title||next?.title||(d.rest?'Rest day':finished?finished.label:plan?'What would make this day meaningful?':'Choose one thing that matters.');
  const label=finished?'Priority completed':next?'Up next':'Daily priority';
  const companion=!plan&&s.preferences.showCompanion!==false;
- const message=captured?.status==='done'?'What helped you finish this one?':captured?.firstStep||p?.firstStep||next?.firstStep||(finished?'What helped you finish this one?':d.rest?'Leave room for a slower day.':'Add one thing you’d like to do today.');
- const showCue=!plan&&!s.focus&&(companion||s.preferences.coach!=='off'||p?.firstStep||next?.firstStep);
- const caption=captured?.status==='done'?'Reflection':captured&&captured.id!==(p||next)?.id?'First step · '+captured.title:p||next?'First step':finished?'Reflection':'Pip';
- const guidance=showCue?`<div class="pip-guidance">${companion?pip('rest'):''}<div><small>${e(caption==='Pip'&&!companion?'Today':caption)}</small><p class="pip-message">${e(message)}</p>${companion?pipAction('Today'):''}${captured&&!finished&&captured.status==='done'?b('Write a reflection','note'):''}</div></div>`:'';
+ const message=s.focus?(s.focus.running?'One task for this session.':'Take your time. Resume when you’re ready.'):captured?.status==='done'?'What helped you finish this one?':captured?.firstStep||p?.firstStep||next?.firstStep||(finished?'What helped you finish this one?':d.rest?'Leave room for a slower day.':'Add one thing you’d like to do today.');
+ const showCue=!plan&&(companion||s.preferences.coach!=='off'||p?.firstStep||next?.firstStep);
+ const caption=s.focus?'Focus':captured?.status==='done'?'Reflection':captured&&captured.id!==(p||next)?.id?'First step · '+captured.title:p||next?'First step':finished?'Reflection':'Pip';
+ const guidance=showCue?`<div class="pip-guidance"><div><small>${e(caption==='Pip'&&!companion?'Today':caption)}</small><p class="pip-message">${e(message)}</p>${companion?pipAction('Today'):''}${captured&&!finished&&captured.status==='done'?b('Write a reflection','note'):''}</div></div>`:'';
  let actions;
  if(p){
   actions=b('Start','start',p.id,'primary','play')+b('Complete','complete',p.id,'secondary','check')+b('I’m stuck','stuck',p.id)+b('Edit','edit',p.id);
@@ -49,7 +49,7 @@ export function daily(s,day,plan,cue){
  }else{
   actions=b('Choose one thing','choose','','primary','plus')+(d.rest?'':b('Rest day','rest'));
  }
- body+=`<section class="priority "><div class="priority-copy"><small>${icon(finished?'check':'star')} ${label}</small><h2>${e(heading)}</h2>${p?.definition?muted('Done when · '+p.definition):''}${plan&&p?.firstStep?`<div class="first"><small>First step</small>${e(p.firstStep)}</div>`:''}<div class="actions">${actions}</div></div>${guidance}</section>`;
+ body+=`<section class="priority ${companion?'pip-perch':''}"><div class="priority-copy"><small>${icon(finished?'check':'star')} ${label}</small><h2>${e(heading)}</h2>${p?.definition?muted('Done when · '+p.definition):''}${plan&&p?.firstStep?`<div class="first"><small>First step</small>${e(p.firstStep)}</div>`:''}<div class="actions">${actions}</div>${guidance}</div>${companion?pip(s.focus?'focus':'rest'):''}</section>`;
  if(!d.rest&&s.preferences.coach!=='off'&&s.preferences.dismissedDay!==today){
  const deferrals=p?s.activities.filter(a=>a.kind==='rescheduled'&&a.entityId===p.id&&a.day>=addDays(today,-6)&&a.day<=today).length:0;
  const prompt=d.budget&&known>d.budget?'Your plan exceeds your time budget.':deferrals>=2?'You moved this priority twice this week. Would a smaller commitment fit?':p&&!p.firstStep?(s.preferences.coach==='direct'?'Choose your first action.':'A first step could make this easier to start.'):null;
@@ -61,7 +61,7 @@ export function daily(s,day,plan,cue){
   body+=section('Day checklist',budget+(supporting.map(taskRow).join('')||muted('No supporting tasks for this day.')));
  }
  if(!plan)body+='</section>';
- if(s.focus){const f=s.focus;body+=section('Focus',(plan?'':pipLine(companion,'focus',s.focus.running?'One task for this session.':'Take your time. Resume when you’re ready.','Today'))+`<strong>${e(s.tasks.find(t=>t.id===f.taskId)?.title)}</strong><p>${e(s.tasks.find(t=>t.id===f.taskId)?.firstStep)}</p><p><time id="elapsed">${Math.floor(elapsedMs(f)/60000)} min elapsed</time> · ${f.running?'Running':'Paused'}</p>${b(f.running?'Pause':'Resume',f.running?'focus.pause':'focus.resume')}${b('Extend 5 min','focus.extend')}${b('Finish session','focus.finish')}${b('Complete','complete',f.taskId)}`);}
+ if(s.focus){const f=s.focus;body+=section('Focus',`<strong>${e(s.tasks.find(t=>t.id===f.taskId)?.title)}</strong><p>${e(s.tasks.find(t=>t.id===f.taskId)?.firstStep)}</p><p><time id="elapsed">${Math.floor(elapsedMs(f)/60000)} min elapsed</time> · ${f.running?'Running':'Paused'}</p>${b(f.running?'Pause':'Resume',f.running?'focus.pause':'focus.resume')}${b('Extend 5 min','focus.extend')}${b('Finish session','focus.finish')}${b('Complete','complete',f.taskId)}`);}
  const weekday=new Date(day+'T12:00').getDay();
  if(plan||(s.preferences.showRoutines&&s.routines.some(r=>!r.paused&&(!r.weekdays?.length||r.weekdays.includes(weekday)))))body+=section('Routines',routines(s,day,plan),plan?b('New routine','routine'):'');
  if(plan)return body+section('Your tasks',`<div class="actions">${b('Inbox','inbox')}${b('All tasks','all')}${b('Unfinished from earlier','missed')}</div>`);

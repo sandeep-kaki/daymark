@@ -5,7 +5,7 @@ export function pip(pose='rest') {
   return `<button type="button" class="pip rabbit" data-pose="${pose}" data-action="greet-pip" aria-label="Greet Pip the rabbit">
     <svg viewBox="0 0 100 108" aria-hidden="true" stroke="#51434a" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" fill="#fff1dc">
       <ellipse cx="50" cy="101" rx="29" ry="3" fill="currentColor" opacity=".13" stroke="none"/>
-      <g class="pip-body"><path d="M69 83c3-16 18-14 18-5 8 8-1 18-15 15z"/>
+      <g class="pip-body"><path class="pip-tail" d="M69 83c3-16 18-14 18-5 8 8-1 18-15 15z"/>
       <path d="M32 69c-11 17-9 30 8 30h21c18-1 18-19 4-31z" fill="#e9d4bb"/>
       <path d="M45 97c-8-14-20-8-18-1 2 4 11 4 18 1zm12 0c4-13 19-10 17-1-2 4-12 4-17 1z"/>
       <g class="pip-head">

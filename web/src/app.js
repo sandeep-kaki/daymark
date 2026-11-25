@@ -123,6 +123,34 @@ function guideInvitation(){
  if(guide.hidden||(!guide.started&&(s().revision>0||account())))return '';
  return `<div class="guide-invite">${b(guide.started?'Resume first-day guide':'First-day guide','guide-open','','quiet','journal')}${b('Dismiss guide','guide-hide','','quiet')}</div>`;
 }
+const starterIdeas={
+ Work:['Draft the opening paragraph','Review one outstanding request','Outline my next meeting'],
+ Learning:['Read a chapter','Practise one problem','Write down one thing I learned'],
+ Personal:['Go for a short walk','Call someone I miss','Plan a meal for tonight']
+};
+function setupStarterChoices(form,planned,saved){
+ const topics=form.querySelector('[data-topics]'),list=form.querySelector('[data-ideas]'),input=form.elements.title;
+ const groups=planned.length?['My tasks',...Object.keys(starterIdeas)]:Object.keys(starterIdeas);
+ let topic=planned.length?'My tasks':saved.topic;
+ if(saved.started&&!saved.done&&groups.includes(saved.topic))topic=saved.topic;
+ let ideas=[];
+ function showIdeas(){
+  ideas=topic==='My tasks'?planned.map(t=>({title:t.title,id:t.id})):(starterIdeas[topic]||[]).map(title=>({title}));
+  topics.querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.textContent===topic)));
+  list.innerHTML=ideas.map((idea,i)=>'<button type="button" class="idea" data-choice="'+i+'" aria-pressed="'+(idea.title===input.value)+'">'+e(idea.title)+'</button>').join('');
+ }
+ topics.innerHTML=groups.map(name=>'<button type="button" class="topic">'+e(name)+'</button>').join('');
+ topics.onclick=ev=>{const b=ev.target.closest('button');if(b){topic=b.textContent;saveGuide({topic});showIdeas();}};
+ list.onclick=ev=>{
+  const button=ev.target.closest('[data-choice]');if(!button)return;
+  const idea=ideas[Number(button.dataset.choice)];input.value=idea.title;
+  saveGuide({title:idea.title,starterId:idea.id||'',firstStep:'',goalId:''});
+  list.querySelectorAll('button').forEach(chip=>chip.setAttribute('aria-pressed',String(chip===button)));
+  gesture('listen',dialog);
+ };
+ form.oninput=()=>{saveGuide({title:input.value,starterId:'',firstStep:'',goalId:''});list.querySelectorAll('button').forEach(chip=>chip.setAttribute('aria-pressed','false'));};
+ showIdeas();
+}
 function openGuide(step){
  const saved=guideState();
  step=Math.min(1,Math.max(0,step??(saved.done?0:saved.step||0)));
@@ -131,12 +159,18 @@ function openGuide(step){
  const intro='<div class="guide-lead">'+(s().preferences.showCompanion===false?'':pip(step?'listen':'welcome'))+'<small>Pip’s first-day guide · '+(step+1)+' of 2</small></div>';
  if(step===0){
   const fields=current?'<p>Your priority for today</p><strong>'+e(current.title)+'</strong>':
-    field('Priority','title',saved.title||'','text',required+' placeholder="e.g. Call Maya about Friday"');
-  form('What matters today?',intro+fields,async data=>{
-   if(!current){await guarded('task.save',{title:data.title,firstStep:saved.firstStep||'',goalId:saved.goalId||'',date:dayKey(),primary:true});saveGuide({title:'',firstStep:'',goalId:''});}
+    '<p>What would you like to make time for?</p><div class="starter-topics" data-topics role="group" aria-label="Starting point"></div><div class="starter-ideas" data-ideas aria-live="polite"></div>'+field('Priority','title',saved.title||'','text',required+' placeholder="e.g. Call Maya about Friday"');
+  form('Pick a starting point',intro+fields,async data=>{
+   if(!current){
+    const draft=guideState();
+    const existing=s().tasks.find(t=>t.id===draft.starterId&&t.title===data.title&&t.date===dayKey()&&!t.archived&&t.status!=='done');
+    if(existing)await guarded('task.priority',{id:existing.id});
+    else await guarded('task.save',{title:data.title,firstStep:draft.firstStep||'',goalId:draft.goalId||'',date:dayKey(),primary:true});
+    saveGuide({title:'',starterId:'',firstStep:'',goalId:''});
+   }
    openGuide(1);return 'next-form';
   },current?'Continue':'Set my priority',b('Skip for now','guide-skip','','quiet')+b('Pause guide','guide-pause','','quiet'));
-  dialog.querySelector('form').oninput=ev=>saveGuide({title:ev.currentTarget.elements.title.value});
+  if(!current)setupStarterChoices(dialog.querySelector('form'),s().tasks.filter(t=>t.date===dayKey()&&!t.archived&&t.status!=='done').slice(0,3),saved);
  }else{
   const prompt=current?'<small>First step</small><strong>'+e(current.firstStep||current.title)+'</strong>':'<strong>Start with one small task when you’re ready.</strong>';
   form('Your day is ready',intro+'<div class="guide-example">'+prompt+'</div><p>You can add another task now, or head to Today.</p>'+field('Another task (optional)','extra',saved.extra||'','text','maxlength="180"'),async data=>{
