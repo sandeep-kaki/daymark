@@ -102,9 +102,27 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  const input=appearancePage.getByLabel('New task for this day');
  await input.fill('Today draft');await tap('Tomorrow');assert.equal(await input.inputValue(),'');
  await input.fill('Tomorrow draft');await tap('Today');assert.equal(await input.inputValue(),'Today draft');
- await tap('Open navigation');await appearancePage.locator('#navigation a[href="#Goals"]').click();
- await appearancePage.locator('#navigation').waitFor({state:'hidden'});await tap('Open navigation');
- await appearancePage.locator('#navigation a[href="#Today"]').click();await appearancePage.locator('#navigation').waitFor({state:'hidden'});await input.waitFor();
+ const phoneTabs=appearancePage.locator('.phone-tabs');
+ assert.equal(await phoneTabs.getByRole('link').count(),5);
+ // Sample the actual lens between tabs before the transition can finish on a fast runner.
+ await appearancePage.evaluate(()=>{
+  window.addEventListener('hashchange',()=>{
+   const bar=document.querySelector('.phone-tabs'),lens=bar.querySelector('.tab-lens');
+   const travel=lens.getAnimations()[0];
+   if(!travel)return;
+   travel.currentTime=travel.effect.getTiming().duration*.3;
+   const frame=lens.getBoundingClientRect(),to=bar.querySelector('[aria-current]').getBoundingClientRect();
+   window.testLensMoved=frame.left>bar.querySelector('a').getBoundingClientRect().left&&frame.left<to.left&&frame.width>to.width;
+  },{once:true});
+ });
+ await phoneTabs.getByRole('link',{name:'Goals'}).click();
+ await phoneTabs.locator('[aria-current][href="#Goals"]').waitFor();
+ assert.equal(await appearancePage.evaluate(()=>window.testLensMoved),true);
+ await phoneTabs.getByRole('link',{name:'Today'}).click();await input.waitFor();
+ await appearancePage.waitForFunction(()=>{
+  const bar=document.querySelector('.phone-tabs'),lens=bar.querySelector('.tab-lens').getBoundingClientRect();
+  return bar.dataset.page==='Today'&&Math.abs(lens.left-bar.querySelector('[aria-current]').getBoundingClientRect().left)<1;
+ });
  await appearancePage.reload();assert.equal(await input.inputValue(),'Today draft');
  await input.focus();assert.equal(await input.evaluate(el=>getComputedStyle(el).outlineStyle),'none');
  assert.notEqual(await appearancePage.locator('.quick-task').evaluate(el=>getComputedStyle(el).borderColor),'transparent');

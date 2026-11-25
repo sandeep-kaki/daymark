@@ -9,6 +9,48 @@ const root=document.querySelector('#app'), dialog=document.querySelector('dialog
 let offset=0, planDay=addDays(dayKey(),1), reviewDay=dayKey(),period='week',saving=false,submit,revision,timeout,previousFocus,lastDay=dayKey();
 const page=()=>screens.includes(location.hash.slice(1))?location.hash.slice(1):'Today';
 const drawer=document.querySelector('#navigation');
+const phoneNav=document.querySelector('.phone-tabs'),lens=phoneNav.querySelector('.tab-lens');
+const phoneWidth=matchMedia('(max-width:720px)');
+let lensTravel,lensLight;
+function updatePhoneNav(destination){
+ if(phoneNav.hidden){
+  phoneNav.style.setProperty('--tab-count',screens.length);
+  lens.after(document.createRange().createContextualFragment(navigationLinks(destination)));
+  phoneNav.hidden=false;
+ }
+ const index=screens.indexOf(destination);
+ const previous=phoneNav.dataset.page;
+ if(previous===destination)return;
+ const track=lens.parentElement;
+ const start=lens.getBoundingClientRect();
+ lensTravel?.cancel();lensLight?.cancel();
+ phoneNav.dataset.page=destination;
+ for(const link of phoneNav.querySelectorAll('a')){
+  if(link.hash==='#'+destination)link.setAttribute('aria-current','page');
+  else link.removeAttribute('aria-current');
+ }
+ lens.style.transform='translateX('+index*100+'%)';
+ if(!previous||!phoneWidth.matches||!motion())return;
+ const end=lens.getBoundingClientRect();
+ if(!end.width)return;
+ // Sample the visible lens so a second tap can redirect it mid-flight.
+ const origin=start.left-track.getBoundingClientRect().left;
+ const target=end.left-track.getBoundingClientRect().left;
+ const distance=target-origin;
+ const stretch=Math.min(.32,Math.abs(distance)/end.width*.13);
+ const frame=(left,scale,height,offset)=>({transform:'translateX('+left+'px) scale('+scale+','+height+')',offset});
+ const middle=origin+distance*.57-end.width*stretch/2;
+ const duration=320+Math.min(100,Math.abs(distance)*.45);
+ lensTravel=lens.animate([
+  frame(origin,start.width/end.width,start.height/end.height,0),
+  frame(middle,1+stretch,.93,.43),frame(target,1,1,1)
+ ],{duration,easing:'cubic-bezier(.25,.78,.28,1)'});
+ const direction=Math.sign(distance);
+ lensLight=lens.firstElementChild.animate([
+  {opacity:0,transform:'translateX('+(-20*direction)+'%)'},
+  {opacity:.8,offset:.38},{opacity:0,transform:'translateX('+(20*direction)+'%)'}
+ ],{duration});
+}
 let drawerTimer, lastPage;
 const motion=()=>!matchMedia('(prefers-reduced-motion: reduce)').matches;
 function slideSelection(nav,from,to){
@@ -33,10 +75,11 @@ drawer.addEventListener('click',ev=>{
 const desktopNav=matchMedia('(min-width:64em)');
 drawer.addEventListener('close',()=>{
  clearTimeout(drawerTimer);
- const selector=desktopNav.matches?'.desktop-nav a[aria-current]':'.menu-button';
- root.querySelector(selector)?.focus({preventScroll:true});
+ const selector=desktopNav.matches?'.desktop-nav a[aria-current]':phoneWidth.matches?'.phone-tabs a[aria-current]':'.menu-button';
+ document.querySelector(selector)?.focus({preventScroll:true});
 });
 desktopNav.addEventListener('change',()=>{if(desktopNav.matches&&drawer.open)drawer.close();});
+phoneWidth.addEventListener('change',()=>{lensTravel?.cancel();lensLight?.cancel();if(phoneWidth.matches&&drawer.open)drawer.close();});
 const day=()=>page()==='Plan'?planDay:addDays(dayKey(),offset);
 const s=()=>snapshot(), task=id=>s().tasks.find(t=>t.id===id);
 const cmd=(type,fields={})=>dispatch({type,...fields,commandId:uid()});
@@ -69,6 +112,7 @@ function render(){
  const body=p==='Today'||p==='Plan'?daily(state,day(),p==='Plan',cue):p==='Goals'?goals(state):p==='Journal'?journal(state):review(state,reviewDay,period);
  const navHadFocus=!!document.activeElement?.closest('.desktop-nav');
  root.innerHTML=shell(p,body+(p==='Today'&&offset===0?guideInvitation():''));
+ updatePhoneNav(p);
  if(lastPage&&lastPage!==p){
   if(desktopNav.matches)slideSelection(root.querySelector('.desktop-nav'),lastPage,p);
   root.querySelector('article').classList.add('arriving');
