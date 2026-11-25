@@ -26,6 +26,17 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  await btn('Choose one thing').click();await p.getByLabel('First action',{exact:true}).waitFor();
  assert.equal(await p.getByLabel('Estimated minutes').isVisible(),false);await btn('Close').click();
  await btn('Capture task').click();await fill('Title','Unrelated idea');await saved('Save task');
+ await p.getByRole('link',{name:'Open plan',exact:true}).click();
+ const picker=p.locator('[data-plan-picker]'),calendar=p.locator('#plan-calendar');
+ await picker.click();const initial=await picker.getAttribute('data-plan-picker');
+ await btn('Next month').click();await p.keyboard.press('Escape');
+ assert.equal(await picker.getAttribute('data-plan-picker'),initial);
+ await picker.click();await p.keyboard.press('PageDown');await p.keyboard.press('ArrowRight');
+ const chosen=await p.locator(':focus').getAttribute('data-day');assert(chosen&&chosen!==initial);
+ await p.keyboard.press('Enter');await calendar.waitFor({state:'hidden'});
+ assert.equal(await picker.getAttribute('data-plan-picker'),chosen);
+ await btn('Add task').click();assert.equal(await p.locator('#dialog input[name=date]').inputValue(),chosen);await btn('Close').click();
+ await route('Today');await p.getByRole('link',{name:'Open journal',exact:true}).click();await btn('Write an entry').waitFor();
  await route('Goals');await btn('New goal').click();await fill('Title','Publish a useful course lesson');await fill('Observable outcome','A lesson ready to share');await saved('Save');
  await btn('Add milestone').click();await fill('Milestone','Finish the lesson outline');await saved('Save');
  await route('Today');await btn('Choose one thing').click();await btn('Create a new priority').click();await fill('Title','Draft three sections');await p.getByText('Planning details',{exact:true}).click();await fill('Definition of done','Three headings with three bullets each');await fill('First action','Open the lesson document');await p.getByLabel('Goal · optional').selectOption({label:'Publish a useful course lesson'});await saved('Save priority');
