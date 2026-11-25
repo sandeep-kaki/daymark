@@ -15,11 +15,11 @@ Daymark's web app is already registered in **daymark-a3fb2**, and the source pac
 
 ## First sign-in
 
-Open **Settings → Continue with Google**. On a device with existing work, select **Copy this device’s saved records if my Google workspace is new** before signing in. The original device workspace stays available. A returning account downloads its cloud records automatically. Signing out reopens the separate device workspace. The Google account's cached data is retained in that browser so pending offline edits can sync on the next sign-in.
+Open **Account → Continue with Google**. On a device with existing work, select **Copy this device’s saved records if my Google workspace is new** before signing in. The original device workspace stays available. A returning account downloads its cloud records automatically. Signing out reopens the separate device workspace. The Google account's cached data is retained in that browser so pending offline edits can sync on the next sign-in.
 
 If your existing work is at the old local address, do the first sign-in **there** with the new Firebase configuration and copy option enabled. Wait for **Synced with Google**, then sign into the Pages site. The Pages origin cannot access another origin’s IndexedDB. Unsaved journal drafts stay with their browser and workspace.
 
-Complete a task, open a second browser profile, sign in with the same Google account and inspect Journal. An edit made offline saves to that profile and synchronizes when Daymark is open and connected again. Distinct records merge automatically. If the same record was edited differently, Settings offers a whole-workspace choice before either version is overwritten. Downloading a file remains available as an optional transfer or recovery tool. Sync mirrors intentional deletions and does not provide historical backup snapshots.
+Complete a task, open a second browser profile, sign in with the same Google account and inspect Journal. An edit made offline saves to that profile and synchronizes when Daymark is open and connected again. Distinct records merge automatically. If the same record was edited differently, Account offers a whole-workspace choice before either version is overwritten. Downloading a file remains available as an optional transfer or recovery tool. Sync mirrors intentional deletions and does not provide historical backup snapshots.
 
 ## Storage and cost
 

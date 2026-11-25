@@ -115,7 +115,7 @@ async function sync(){
     copyOnFirstUse=false;sessionStorage.removeItem('daymark-seed-account');
     conflict=null;override=null;retry=2000;setStatus('Synced with Google');
   }catch(err){
-    if(err instanceof SyncConflict){setStatus('Sync paused · review conflicting changes in Settings');}
+    if(err instanceof SyncConflict){setStatus('Sync paused · review conflicting changes in Account');}
     else if(err.code==='permission-denied'){setStatus('Sync paused · Firebase access was denied');}
     else if(!err.code && err.message?.includes('workspace')){setStatus(err.message);}
     else{setStatus('Saved on device · waiting to sync');schedule(retry);retry=Math.min(60000,retry*2);}

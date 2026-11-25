@@ -1,4 +1,4 @@
-import {pip,pipLine} from './pip.js';
+import {pip,pipLine,pipAction} from './pip.js';
 import {dayKey,addDays,weekStart,routineProgress,elapsedMs} from './domain.js';
 import {esc as e,button as b,icon,displayDate,empty} from './ui.js';
 export const screens=['Today','Plan','Goals','Journal','Review'];
@@ -7,7 +7,8 @@ export function navigationLinks(page){
  return screens.map((p,i)=>`<a href="#${p}" ${p===page?'aria-current="page"':''}>${icon(symbols[i])}${p}</a>`).join('');
 }
 export function shell(page,body){
- return `<main><header><div class="masthead"><button type="button" class="menu-button quiet" data-action="menu" aria-label="Open navigation" aria-haspopup="dialog" aria-controls="navigation">${icon('menu')}</button><a class="wordmark" href="#Today">Daymark</a><span class="current-page">${e(page)}</span></div><div class="account-tools"><small data-cloud-status></small><button class="quiet mode-toggle" type="button" data-action="appearance-mode" aria-label="Appearance mode" title="Appearance mode">${icon('sun')}</button>${b('Settings','settings','','quiet','settings')}</div></header><article>${body}</article></main><nav class="mobile" aria-label="Destinations">${navigationLinks(page)}</nav>`;
+ const nextMode=document.documentElement.style.colorScheme==='dark'?'light':'dark';
+ return `<main><header><div class="masthead"><button type="button" class="menu-button quiet" data-action="menu" aria-label="Open navigation" aria-haspopup="dialog" aria-controls="navigation">${icon('menu')}</button><a class="wordmark" href="#Today">Daymark</a><span class="current-page">${e(page)}</span></div><div class="account-tools"><button class="quiet account-button" type="button" data-action="account" aria-label="Account" title="Account and sync">${icon('account')}<span class="account-label">Account</span><small data-cloud-status></small></button><button class="quiet mode-toggle" type="button" data-action="appearance-mode" aria-label="Switch to ${nextMode} mode" title="Switch to ${nextMode} mode">${icon(nextMode==='dark'?'moon':'sun')}</button>${b('Settings','settings','','quiet','settings')}</div></header><article>${body}</article></main><nav class="mobile" aria-label="Destinations">${navigationLinks(page)}</nav>`;
 }
 const title=(label,heading,actions='')=>`<section class="heading"><div><small>${e(label)}</small><h1>${e(heading)}</h1></div><div class="actions">${actions}</div></section>`;
 const section=(name,body,action='')=>`<section class="panel"><div class="line"><h2>${e(name)}</h2>${action}</div>${body}</section>`;
@@ -25,6 +26,7 @@ export function daily(s,day,plan,cue){
  const planActions=plan?b('Add task','dated')+b('Day settings','day-settings'):'';
  let body=(plan?'':'<section class="morning-panel">')+title(displayDate(day,{weekday:'long',month:'long',day:'numeric'}),plan?'Plan your day':day===today?'Your morning.':'Tomorrow',planActions);
  if(!plan)body+='<form class="quick-task"><input name="title" required maxlength="180" aria-label="New task for this day" placeholder="What matters today?"><button class="primary" type="submit">Add</button></form>';
+ if(plan)body+=pipLine(s.preferences.showCompanion!==false,'listen',open.length?`You have ${open.length} open ${open.length===1?'task':'tasks'} planned. Make room for the first one.`:'What could you set up now to make this day easier?','Plan');
  body+=plan?`<label class="date">Plan for <input type="date" data-date="plan" value="${day}"></label>`:`<div class="switch">${b('Today','today','',day===today?'selected':'quiet')}${s.preferences.showTomorrow?b('Tomorrow','tomorrow','',day===today?'quiet':'selected'):''}</div>`;
  const completedIds=new Set(tasks.filter(t=>t.status==='done').map(t=>t.id));
  const finished=!plan&&!p&&!d.rest&&s.activities.findLast(a=>a.kind==='completed'&&a.previous?.priority&&a.day===day&&completedIds.has(a.entityId));
@@ -34,9 +36,9 @@ export function daily(s,day,plan,cue){
  const label=finished?'Priority completed':next?'Up next':'Daily priority';
  const companion=!plan&&s.preferences.showCompanion!==false;
  const message=captured?.status==='done'?'What helped you finish this one?':captured?.firstStep||p?.firstStep||next?.firstStep||(finished?'What helped you finish this one?':d.rest?'Leave room for a slower day.':'Add one thing you’d like to do today.');
- const showCue=!plan&&!s.focus&&(s.preferences.coach!=='off'||p?.firstStep||next?.firstStep);
+ const showCue=!plan&&!s.focus&&(companion||s.preferences.coach!=='off'||p?.firstStep||next?.firstStep);
  const caption=captured?.status==='done'?'Reflection':captured&&captured.id!==(p||next)?.id?'First step · '+captured.title:p||next?'First step':finished?'Reflection':'Pip';
- const guidance=showCue?`<div class="pip-guidance">${companion?pip('rest'):''}<div><small>${e(caption==='Pip'&&!companion?'Today':caption)}</small><p class="pip-message">${e(message)}</p>${captured&&!finished&&captured.status==='done'?b('Write a reflection','note'):''}</div></div>`:'';
+ const guidance=showCue?`<div class="pip-guidance">${companion?pip('rest'):''}<div><small>${e(caption==='Pip'&&!companion?'Today':caption)}</small><p class="pip-message">${e(message)}</p>${companion?pipAction('Today'):''}${captured&&!finished&&captured.status==='done'?b('Write a reflection','note'):''}</div></div>`:'';
  let actions;
  if(p){
   actions=b('Start','start',p.id,'primary','play')+b('Complete','complete',p.id,'secondary','check')+b('I’m stuck','stuck',p.id)+b('Edit','edit',p.id);
@@ -59,7 +61,7 @@ export function daily(s,day,plan,cue){
   body+=section('Day checklist',budget+(supporting.map(taskRow).join('')||muted('No supporting tasks for this day.')));
  }
  if(!plan)body+='</section>';
- if(s.focus){const f=s.focus;body+=section('Focus',(plan?'':pipLine(companion,'focus',s.focus.running?'One task for this session.':'Take your time. Resume when you’re ready.'))+`<strong>${e(s.tasks.find(t=>t.id===f.taskId)?.title)}</strong><p>${e(s.tasks.find(t=>t.id===f.taskId)?.firstStep)}</p><p><time id="elapsed">${Math.floor(elapsedMs(f)/60000)} min elapsed</time> · ${f.running?'Running':'Paused'}</p>${b(f.running?'Pause':'Resume',f.running?'focus.pause':'focus.resume')}${b('Extend 5 min','focus.extend')}${b('Finish session','focus.finish')}${b('Complete','complete',f.taskId)}`);}
+ if(s.focus){const f=s.focus;body+=section('Focus',(plan?'':pipLine(companion,'focus',s.focus.running?'One task for this session.':'Take your time. Resume when you’re ready.','Today'))+`<strong>${e(s.tasks.find(t=>t.id===f.taskId)?.title)}</strong><p>${e(s.tasks.find(t=>t.id===f.taskId)?.firstStep)}</p><p><time id="elapsed">${Math.floor(elapsedMs(f)/60000)} min elapsed</time> · ${f.running?'Running':'Paused'}</p>${b(f.running?'Pause':'Resume',f.running?'focus.pause':'focus.resume')}${b('Extend 5 min','focus.extend')}${b('Finish session','focus.finish')}${b('Complete','complete',f.taskId)}`);}
  const weekday=new Date(day+'T12:00').getDay();
  if(plan||(s.preferences.showRoutines&&s.routines.some(r=>!r.paused&&(!r.weekdays?.length||r.weekdays.includes(weekday)))))body+=section('Routines',routines(s,day,plan),plan?b('New routine','routine'):'');
  if(plan)return body+section('Your tasks',`<div class="actions">${b('Inbox','inbox')}${b('All tasks','all')}${b('Unfinished from earlier','missed')}</div>`);
@@ -68,17 +70,17 @@ export function daily(s,day,plan,cue){
  return body+`<footer class="today-footer">${b('Capture task','new','','quiet','inbox')}<a href="#Plan">${icon('plan')} Open plan</a><a href="#Journal">${icon('journal')} Open journal</a></footer>`;
 }
 export function goals(s){
- return title('Longer-term direction','Goals',b('New goal','goal','','primary','plus'))+(s.goals.map(g=>section(g.title,muted(g.why)+muted([g.state||'active',g.date].filter(Boolean).join(' · '))+g.milestones.map(m=>`<div class="row"><span class="grow">${e(m.title)}${m.week?muted("Week of "+displayDate(m.week)):""}</span>${b("Revise","milestone-edit",m.id)}${b(m.done?'Achieved':'Mark achieved','milestone-toggle',m.id)}</div>`).join('')+`<div class="actions">${b('Add milestone','milestone',g.id)}${b('Edit goal','goal',g.id)}${b('Update status','goal-state',g.id)}</div>`+evidence(s,g.id))).join('')||empty('What would you like to work toward?','Choose an outcome you’ll recognize when it happens.','goal','Create a goal','goal'));
+ return title('Longer-term direction','Goals',b('New goal','goal','','primary','plus'))+pipLine(s.preferences.showCompanion!==false,'rest',s.goals.length?'Which milestone would move a goal forward this week?':'Pick one outcome you’d be proud to reach.','Goals')+(s.goals.map(g=>section(g.title,muted(g.why)+muted([g.state||'active',g.date].filter(Boolean).join(' · '))+g.milestones.map(m=>`<div class="row"><span class="grow">${e(m.title)}${m.week?muted("Week of "+displayDate(m.week)):""}</span>${b("Revise","milestone-edit",m.id)}${b(m.done?'Achieved':'Mark achieved','milestone-toggle',m.id)}</div>`).join('')+`<div class="actions">${b('Add milestone','milestone',g.id)}${b('Edit goal','goal',g.id)}${b('Update status','goal-state',g.id)}</div>`+evidence(s,g.id))).join('')||empty('What would you like to work toward?','Choose an outcome you’ll recognize when it happens.','goal','Create a goal','goal'));
 }
 function evidence(s,id){const facts=s.activities.filter(a=>a.goalId===id||s.tasks.some(t=>t.id===a.entityId&&t.goalId===id));return facts.length?'<details><summary>Linked activity ('+facts.length+')</summary>'+facts.map(fact).join('')+'</details>':'';}
 function fact(a){return `<div class="record"><small>${e(displayDate(a.day))} · ${e(a.kind)}</small><strong>${e(a.label)}</strong>${a.detail?muted(a.detail):''}${a.from!==undefined?muted((a.from||'Inbox')+' → '+(a.to||'Inbox')):''}${a.original?muted('Previous scope · '+a.original+' '+(a.previousDefinition||'')):''}${a.minutes?muted(a.minutes+' min worked'):''}</div>`;}
 function note(n){return `<div class="record"><small>${e(displayDate(n.day))} · ${e(n.kind)}</small><p>${e(n.body)}</p><div class="actions">${b('Edit','note',n.id)}${!n.convertedTaskId?b('Create follow-up','follow',n.id):''}</div></div>`;}
-export function journal(s){return title('Activity and reflection','Journal',b('Log work','work')+b('Write an entry','note','','primary','plus'))+(s.preferences.showCompanion===false?'':pipLine(true,'rest','What would you like to remember about today?'))+section('Your writing',[...s.notes].sort((a,b)=>b.day.localeCompare(a.day)).map(note).join('')||muted('Write down a moment, achievement or lesson.'))+section('Activity',[...s.activities].reverse().map(fact).join('')||muted('Your task activity and logged work appear here.'));}
+export function journal(s){return title('Activity and reflection','Journal',b('Log work','work')+b('Write an entry','note','','primary','plus'))+(s.preferences.showCompanion===false?'':pipLine(true,'rest','What would you like to remember about today?','Journal'))+section('Your writing',[...s.notes].sort((a,b)=>b.day.localeCompare(a.day)).map(note).join('')||muted('Write down a moment, achievement or lesson.'))+section('Activity',[...s.activities].reverse().map(fact).join('')||muted('Your task activity and logged work appear here.'));}
 export function review(s,day,period){
  const from=period==='week'?weekStart(day):period==='month'?day.slice(0,7)+'-01':day,to=period==='week'?addDays(from,6):period==='month'?dayKey(new Date(+day.slice(0,4),+day.slice(5,7),0)):day;
  const within=x=>x.day>=from&&x.day<=to;
  return title('Look back','Review',b(period==='month'?'Reassess a goal':'Record an experiment','experiment'))+`<div class="switch"><select aria-label="Review period" data-period>${['day','week','month'].map(x=>`<option ${period===x?'selected':''}>${x}</option>`).join('')}</select><input aria-label="Review date" type="date" data-date="review" value="${day}"></div>`+
- (s.preferences.showCompanion!==false&&s.activities.some(a=>a.kind==='completed'&&within(a))?pipLine(true,'rest','Completed this period · '+s.activities.findLast(a=>a.kind==='completed'&&within(a)).label):'')+
+ pipLine(s.preferences.showCompanion!==false,'rest',s.activities.some(a=>a.kind==='completed'&&within(a))?'Completed this period · '+s.activities.findLast(a=>a.kind==='completed'&&within(a)).label:'What worked this period that you’d like to repeat?','Review')+
  section('Goals and milestones',s.goals.map(g=>`<div class="record"><strong>${e(g.title)}</strong>${muted(g.milestones.map(m=>(m.done?'✓ ':'○ ')+m.title).join(' · ')||'No milestones yet')}${evidence({...s,activities:s.activities.filter(within)},g.id)}</div>`).join('')||muted('No goals yet.'))+
  section('Activity · '+displayDate(from)+' – '+displayDate(to),[...s.activities].filter(within).reverse().map(fact).join('')||muted('No recorded activity for this period.'))+
  section('Routine and focus logs',s.logs.filter(within).map(l=>{const r=s.routines.find(x=>x.id===l.routineId);return muted(displayDate(l.day)+' · '+r.title+' · '+l.value+' '+(l.unit||r.unit));}).concat(s.sessions.filter(within).map(x=>muted(displayDate(x.day)+' · Focus · '+x.minutes+' min'))).join('')||muted('No logs for this period.'))+

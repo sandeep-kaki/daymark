@@ -12,9 +12,9 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  context.setDefaultNavigationTimeout(60000);
  const p=await context.newPage();const errors=[];p.on('pageerror',x=>errors.push(x.message));
  const btn=name=>p.getByRole('button',{name,exact:true}).first();const fill=(label,value)=>p.getByLabel(label,{exact:true}).fill(value);
- const route=async name=>{if(await btn('Open navigation').isVisible())await btn('Open navigation').click();await p.locator('nav:visible a').filter({hasText:name}).first().click();};
+ const route=async name=>{if(await btn('Open navigation').isVisible())await btn('Open navigation').click();await p.locator('nav:visible a').filter({hasText:name}).first().click();await p.waitForFunction(expected=>document.querySelector('.current-page')?.textContent===expected,name);await p.locator('#navigation').waitFor({state:'hidden'});};
  const saved=async name=>{await p.locator('dialog button[type=submit]').filter({hasText:name}).click();await p.locator('#dialog').waitFor({state:'hidden'});await p.waitForTimeout(100);};
- await p.goto(origin);await btn('Choose one thing').waitFor();
+ await p.goto(origin);await btn('Skip for now').click();await btn('Choose one thing').waitFor();
  if(process.env.DAYMARK_SCREENSHOTS){
   for(const width of [390,1280]){
    await p.setViewportSize({width,height:844});
@@ -34,10 +34,10 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  await btn('Write an entry').click();await fill('Your entry','Writing the outline helped');await p.reload();await btn('Write an entry').click();assert.equal(await p.getByLabel('Your entry').inputValue(),'Writing the outline helped');await saved('Save entry');
  await route('Review');assert.ok((await p.locator('article').innerText()).includes('Unexpected editing session'));
  await p.evaluate(()=>navigator.serviceWorker.ready);await p.waitForFunction(()=>!!navigator.serviceWorker.controller);await context.setOffline(true);await p.reload();await p.locator('article').waitFor();
- for(const name of ['Today','Plan','Goals','Journal','Review']){await route(name);assert.equal(await p.locator('header span').innerText(),name);}
+ for(const name of ['Today','Plan','Goals','Journal','Review']){await route(name);assert.equal(await p.locator('header .current-page').innerText(),name);assert.equal(await p.locator('main .pip').count(),1);}
  const reopened=await context.newPage();await reopened.goto(new URL('#Journal',origin).href);await reopened.getByText('Writing the outline helped',{exact:true}).waitFor();await reopened.close();
  await context.setOffline(false);await btn('Settings').click();await p.getByText('File transfer and deletion',{exact:true}).click();const download=p.waitForEvent('download');await btn('Download backup').click();const path=await (await download).path();
- const clean=await browser.newContext();const other=await clean.newPage();await other.goto(origin);await other.getByRole('button',{name:'Settings',exact:true}).click();await other.getByText('File transfer and deletion',{exact:true}).click();await other.locator('#restore-file').setInputFiles(path);await other.getByRole('button',{name:'Replace workspace',exact:true}).click();await other.getByRole('heading',{name:'Draft three sections'}).waitFor();assert.equal(errors.length,0);
+ const clean=await browser.newContext();const other=await clean.newPage();await other.goto(origin);await other.getByRole('button',{name:'Skip for now'}).click();await other.getByRole('button',{name:'Settings',exact:true}).click();await other.getByText('File transfer and deletion',{exact:true}).click();await other.locator('#restore-file').setInputFiles(path);await other.getByRole('button',{name:'Replace workspace',exact:true}).click();await other.getByRole('heading',{name:'Draft three sections'}).waitFor();assert.equal(errors.length,0);
  await btn('Close').click();await p.locator('#dialog').waitFor({state:'hidden'});await other.reload();await other.getByRole('heading',{name:'Draft three sections'}).waitFor();
  for(const width of [320,1280])for(const theme of ['light','dark']){
   await p.setViewportSize({width,height:850});await p.emulateMedia({colorScheme:theme});
@@ -47,10 +47,11 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  await btn('Open navigation').click();await p.keyboard.press('Escape');
  await p.waitForFunction(()=>document.activeElement?.dataset.action==='menu');
  await btn('Settings').click();await p.getByRole('radio',{name:'Dark',exact:true}).check();
+ await p.getByRole('radio',{name:'Direct',exact:true}).check();
  await p.getByLabel('Show the rabbit companion').uncheck();await saved('Save settings');
  await p.reload();await btn('Capture task').waitFor();assert.equal(await p.locator('.rabbit').count(),0);
  assert.equal(await p.locator('html').getAttribute('data-theme'),'dark');
- await btn('Settings').click();await p.getByRole('radio',{name:'System',exact:true}).check();
+ await btn('Settings').click();assert(await p.getByRole('radio',{name:'Direct',exact:true}).isChecked());await p.getByRole('radio',{name:'System',exact:true}).check();
  await p.getByLabel('Show the rabbit companion').check();await saved('Save settings');
  await p.waitForFunction(()=>document.querySelector('.pip svg')?.getBoundingClientRect().width>0);
  await p.setViewportSize({width:390,height:844});await p.emulateMedia({colorScheme:'light'});
@@ -63,34 +64,38 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  const guide=await learner.newPage();
  const press=name=>guide.getByRole('button',{name,exact:true}).click();
  await guide.goto(origin);
- await press('Dismiss guide');await guide.reload();await press('Settings');await press('First-day guide');
+ await guide.getByRole('heading',{name:'What matters today?'}).waitFor();
  await guide.getByLabel('Priority',{exact:true}).fill('Prepare a lesson');
- await guide.getByLabel('First small step').fill('Choose one example');
  await press('Pause guide');await guide.reload();await press('Resume first-day guide');
  assert.equal(await guide.getByLabel('Priority',{exact:true}).inputValue(),'Prepare a lesson');
- await press('Save priority and continue');await press('Preview timer');await guide.getByText('25:00',{exact:true}).waitFor();
+ await press('Set my priority');await guide.getByRole('heading',{name:'Your day is ready'}).waitFor();
  await press('Back');await guide.getByRole('dialog').getByText('Prepare a lesson',{exact:true}).waitFor();
- await press('Continue');await press('Continue');await press('Continue');
- if(await guide.getByRole('button',{name:'Set up Google sync'}).isVisible()){
-  await press('Set up Google sync');await press('Close');await press('Resume first-day guide');
- }
- await press('Finish on this device');await guide.reload();
+ await press('Continue');await guide.getByLabel('Another task (optional)').fill('Choose an example');
+ await press('Start my day');await guide.reload();
  await guide.getByRole('heading',{name:'Prepare a lesson',exact:true}).waitFor();
  assert.equal(await guide.getByRole('button',{name:'Resume first-day guide'}).count(),0);
- await press('Settings');await press('First-day guide');await guide.getByRole('heading',{name:'Choose your priority'}).waitFor();
- assert.equal(await guide.evaluate(async()=>(await import('./src/store.js')).snapshot().tasks.length),1);
+ await press('Settings');await press('First-day guide');await guide.getByRole('heading',{name:'What matters today?'}).waitFor();
+ assert.equal(await guide.evaluate(async()=>(await import('./src/store.js')).snapshot().tasks.length),2);
  await learner.close();
  // An isolated device exercises Appearance and Pip without altering the other test workspaces.
  const device=await browser.newContext({viewport:{width:390,height:844},colorScheme:'light'});
  const appearancePage=await device.newPage();
  const tap=name=>appearancePage.getByRole('button',{name,exact:true}).click();
  const choose=(group,name)=>appearancePage.getByRole('group',{name:group,exact:true}).getByRole('radio',{name,exact:true}).check();
- await appearancePage.goto(origin);
+ await appearancePage.goto(origin);await tap('Skip for now');
  const input=appearancePage.getByLabel('New task for this day');
+ await input.fill('Today draft');await tap('Tomorrow');assert.equal(await input.inputValue(),'');
+ await input.fill('Tomorrow draft');await tap('Today');assert.equal(await input.inputValue(),'Today draft');
+ await appearancePage.locator('nav:visible a[href="#Goals"]').click();await appearancePage.locator('nav a[aria-current].sliding[href="#Goals"]').waitFor();await appearancePage.locator('nav:visible a[href="#Today"]').click();await input.waitFor();
+ await appearancePage.reload();assert.equal(await input.inputValue(),'Today draft');
+ await input.focus();assert.equal(await input.evaluate(el=>getComputedStyle(el).outlineStyle),'none');
+ assert.notEqual(await appearancePage.locator('.quick-task').evaluate(el=>getComputedStyle(el).borderColor),'transparent');
  await input.fill('Call Maya about Friday');await input.press('Enter');
  await appearancePage.getByText('Open the contact details for Maya.',{exact:true}).waitFor();
+ assert.equal(await input.inputValue(),'');await tap('Tomorrow');assert.equal(await input.inputValue(),'Tomorrow draft');await tap('Today');
  assert.equal(await appearancePage.locator('.pip').count(),1);
  await tap('Greet Pip the rabbit');
+ assert(await appearancePage.getByRole('button',{name:'Capture another thought'}).isVisible());
  assert.equal(await appearancePage.locator('.pip').getAttribute('data-pose'),'greet');
  if(process.env.DAYMARK_SCREENSHOTS)await appearancePage.screenshot({path:require('node:path').join(process.env.DAYMARK_SCREENSHOTS,'pip-capture.png')});
  await tap('Start');await tap('Open focus timer');
@@ -117,15 +122,19 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
   assert(await appearancePage.locator('#dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1));
  }
  if(process.env.DAYMARK_SCREENSHOTS)await appearancePage.screenshot({path:require('node:path').join(process.env.DAYMARK_SCREENSHOTS,'pip-settings.png')});
+ await appearancePage.locator('#dialog').evaluate(el=>el.scrollTop=el.scrollHeight);assert(await appearancePage.getByRole('button',{name:'Close',exact:true}).evaluate(el=>{const box=el.getBoundingClientRect(),d=el.closest('dialog').getBoundingClientRect();return box.top>=d.top&&box.bottom<=d.bottom;}));
  await tap('Close');await appearancePage.reload();await tap('Settings');
  assert(await appearancePage.getByRole('radio',{name:'Apricot & Clay'}).isChecked());
- await tap('Reset appearance');await tap('Close');await tap('Appearance mode');await choose('Color mode','Dark');await tap('Close');
+ await tap('Reset appearance');await tap('Close');await tap('Switch to dark mode');await appearancePage.waitForFunction(()=>document.documentElement.style.colorScheme==='dark');
+ assert.equal(await appearancePage.locator('#dialog[open]').count(),0);
+ await tap('Switch to light mode');await appearancePage.waitForFunction(()=>document.documentElement.style.colorScheme==='light');
+ await tap('Account');await appearancePage.getByRole('heading',{name:'Storage',exact:true}).waitFor();await tap('Close');
  await appearancePage.emulateMedia({reducedMotion:'reduce'});
  await tap('Greet Pip the rabbit');
  assert.equal(await appearancePage.locator('.pip').evaluate(el=>el.getAnimations({subtree:true}).length),0);
  await device.close();
  console.log('PASS four palettes, three typefaces, independent sizes, quick mode, reset, persisted appearance, contextual first step, Pip reactions and reflection.');
- console.log('PASS first-day guide: dismiss, replay, recover draft, save a real priority once, preview focus, cancel sync, finish locally.');
+ console.log('PASS first-day guide: dismiss, replay, recover draft, save a real priority once, automatic first visit, automatic first step, optional second task, finish locally.');
  const unavailable=await browser.newContext();await unavailable.addInitScript(()=>Object.defineProperty(window,'indexedDB',{value:undefined}));const unavailablePage=await unavailable.newPage();await unavailablePage.goto(origin);await unavailablePage.getByRole('heading',{name:'Workspace unavailable'}).waitFor();await unavailable.close();
  console.log('PASS responsive checks at 320 and 1280 px in both themes; stale cross-tab form retains input.');
  console.log('PASS Chromium '+browser.version()+': capture, goal, milestone, priority, start, partial, completion/undo, retrospective work, draft recovery, review, five offline destinations, portable restore into clean profile.');

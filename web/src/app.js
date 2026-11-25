@@ -1,18 +1,36 @@
 import {initializeAccount,startSync,account,configured,syncStatus,connect,disconnect,hasConflict,resolveConflict} from './cloud.js';
 import {openStore,draftPrefix,snapshot,dispatch,subscribe,replaceWorkspace,exportWorkspace} from './store.js';
 import {dayKey,addDays,emptyState,parseBackup,elapsedMs,uid} from './domain.js';
-import {field,textarea,select,button as b,esc as e,goalSelect} from './ui.js';
-import {applyAppearance,setAppearance,appearanceSettings,appearanceGroup} from './appearance.js';
+import {field,textarea,select,button as b,icon,esc as e,goalSelect} from './ui.js';
+import {applyAppearance,setAppearance,appearanceSettings,toggleMode} from './appearance.js';
 import {pip,pipLine} from './pip.js';
 import {shell,screens,daily,goals,journal,review,taskRow,navigationLinks} from './views.js';
 const root=document.querySelector('#app'), dialog=document.querySelector('dialog'), toast=document.querySelector('#toast');
 let offset=0, planDay=addDays(dayKey(),1), reviewDay=dayKey(),period='week',saving=false,submit,revision,timeout,previousFocus,lastDay=dayKey();
 const page=()=>screens.includes(location.hash.slice(1))?location.hash.slice(1):'Today';
 const drawer=document.querySelector('#navigation');
+let drawerTimer, lastPage;
+const motion=()=>!matchMedia('(prefers-reduced-motion: reduce)').matches;
+function slideSelection(nav,from,to){
+ const prior=nav.querySelector('a[href="#'+from+'"]'), selected=nav.querySelector('a[href="#'+to+'"]');
+ if(!prior||!selected||from===to)return;
+ prior.removeAttribute('aria-current');selected.setAttribute('aria-current','page');
+ if(!motion())return;
+ const a=prior.getBoundingClientRect(), b=selected.getBoundingClientRect();
+ selected.style.setProperty('--slide-x',(a.left-b.left)+'px');
+ selected.style.setProperty('--slide-y',(a.top-b.top)+'px');
+ selected.classList.remove('sliding');void selected.offsetWidth;selected.classList.add('sliding');
+}
 drawer.addEventListener('click',ev=>{
- if(ev.target===drawer || ev.target.closest('button,a'))drawer.close();
+ clearTimeout(drawerTimer);
+ const link=ev.target.closest('nav a');
+ if(link){
+  const prior=drawer.querySelector('[aria-current]')?.hash.slice(1);
+  slideSelection(drawer,prior,link.hash.slice(1));
+  drawerTimer=setTimeout(()=>{if(drawer.open)drawer.close();},motion()&&prior!==link.hash.slice(1)?240:0);
+ }else if(ev.target===drawer||ev.target.closest('button'))drawer.close();
 });
-drawer.addEventListener('close',()=>root.querySelector('[data-action="menu"]')?.focus());
+drawer.addEventListener('close',()=>{clearTimeout(drawerTimer);root.querySelector('[data-action="menu"]')?.focus();});
 matchMedia('(max-width:720px)').addEventListener('change',()=>{if(drawer.open)drawer.close();});
 const day=()=>page()==='Plan'?planDay:addDays(dayKey(),offset);
 const s=()=>snapshot(), task=id=>s().tasks.find(t=>t.id===id);
@@ -24,19 +42,33 @@ function gesture(pose,scope=root){
  pet.dataset.pose=pose;
  pet.getAnimations({subtree:true}).forEach(animation=>{animation.cancel();animation.play();});
 }
+const quickDrafts=new Map();
+function readQuickDraft(key){
+ try{return sessionStorage.getItem(key)??quickDrafts.get(key)??'';}catch{return quickDrafts.get(key)||'';}
+}
+function writeQuickDraft(key,value){
+ if(value)quickDrafts.set(key,value);else quickDrafts.delete(key);
+ try{if(value)sessionStorage.setItem(key,value);else sessionStorage.removeItem(key);}catch{/* Keep drafts through navigation in this tab. */}
+}
 function rememberCue(id){
  pipCue={id,day:day(),workspace:draftPrefix()};
 }
 function render(){
  const p=page(),state=s();
  applyAppearance(state.preferences.theme);
- const scope=draftPrefix()+p+day();
+ const scope=draftPrefix()+'quick-task:'+day();
  const existing=root.querySelector('.quick-task input');
- const draft=existing?.dataset.scope===scope?existing.value:'';
+ const draft=existing?.dataset.scope===scope?existing.value:readQuickDraft(scope);
  const editing=existing&&document.activeElement===existing;
  const cue=pipCue?.workspace===draftPrefix()?pipCue:null;
  const body=p==='Today'||p==='Plan'?daily(state,day(),p==='Plan',cue):p==='Goals'?goals(state):p==='Journal'?journal(state):review(state,reviewDay,period);
  root.innerHTML=shell(p,body+(p==='Today'&&offset===0?guideInvitation():''));
+ if(lastPage&&lastPage!==p){
+  slideSelection(root.querySelector('.mobile'),lastPage,p);
+  root.querySelector('article').classList.add('arriving');
+  gesture('arrive');
+ }
+ lastPage=p;
  const input=root.querySelector('.quick-task input');
  if(input){input.dataset.scope=scope;input.value=draft;if(editing)input.focus({preventScroll:true});}
  if(p==='Today'&&!welcomePlayed&&!state.focus){gesture('welcome');welcomePlayed=true;}
@@ -61,8 +93,8 @@ function close(discard=false){if(formDirty&&!discard&&!confirm('Discard the chan
 function form(name,fields,handler,label='Save',extras=''){
  if(!dialog.open){previousFocus=document.activeElement;history.pushState({sheet:true},'',location.href);}
  revision=s().revision;submit=handler;formDirty=false;
- dialog.innerHTML=`<div class="line"><h2 id="dialog-title">${e(name)}</h2>${b('Close','close','','quiet')}</div><form>${fields}<p role="alert"></p>${handler?`<button class="primary" type="submit">${e(label)}</button>`:''}</form>${extras}`;
- if(!dialog.open)dialog.showModal();dialog.querySelector('input:not([type=hidden]),textarea,select,button[type=submit]')?.focus();}
+ dialog.innerHTML=`<div class="line dialog-heading"><h2 id="dialog-title">${e(name)}</h2><button type="button" class="dialog-close" data-action="close" aria-label="Close">${icon('close')}</button></div><form>${fields}<p role="alert"></p>${handler?`<button class="primary" type="submit">${e(label)}</button>`:''}</form>${extras}`;
+ if(!dialog.open)dialog.showModal();dialog.scrollTop=0;const focus=dialog.querySelector('input:not([type=hidden]),textarea,select,button[type=submit]')||dialog.querySelector('.dialog-close');focus?.focus({preventScroll:true});}
 dialog.addEventListener('close',()=>{
  if(previousFocus?.isConnected){previousFocus.focus();return;}
  const action=previousFocus?.dataset.action;
@@ -72,13 +104,13 @@ dialog.addEventListener('close',()=>{
 dialog.addEventListener('input',ev=>{if(!ev.target.hasAttribute('data-appearance'))formDirty=!ev.target.closest('form')?.oninput;});
 window.addEventListener('beforeunload',ev=>{if(formDirty){ev.preventDefault();ev.returnValue='';}});
 dialog.addEventListener('cancel',ev=>{ev.preventDefault();close();});
-window.addEventListener('popstate',()=>{if(dialog.open){if(formDirty&&!confirm('Discard the changes in this form?')){history.pushState({sheet:true},'',location.href);return;}formDirty=false;dialog.close();}if(s())render();});
+window.addEventListener('popstate',()=>{if(dialog.open){if(formDirty&&!confirm('Discard the changes in this form?')){history.pushState({sheet:true},'',location.href);return;}formDirty=false;dialog.close();}if(s()&&page()===lastPage)render();});
 window.addEventListener('hashchange',()=>{if(s())render();window.scrollTo(0,0);});
 dialog.addEventListener('submit',async ev=>{ev.preventDefault();if(!submit||saving)return;saving=true;
  try{const result=await submit(Object.fromEntries(new FormData(ev.target)));if(result==='workspace-switch'||result==='next-form'){formDirty=false;return;}close(true);flash('Saved');}catch(err){dialog.querySelector('[role=alert]').textContent=err.message;}finally{saving=false;}});
 const required='required maxlength="180"',number='min="1" max="1440"', choices=arr=>arr.map(x=>[x,x]);
 const guarded=(type,data)=>cmd(type,{...data,expectedRevision:revision});
-const guideTitles=['Choose your priority','Try a focus session','Look back on your day','Choose where to save'];
+
 const guideKey=()=>draftPrefix()+'first-day-guide-v1';
 function guideState(){
  try{return JSON.parse(localStorage.getItem(guideKey()))||{};}catch{return {};}
@@ -93,35 +125,25 @@ function guideInvitation(){
 }
 function openGuide(step){
  const saved=guideState();
- if(step===undefined)step=saved.done?0:saved.step||0;
- step=Number.isInteger(step)?Math.min(3,Math.max(0,step)):0;
+ step=Math.min(1,Math.max(0,step??(saved.done?0:saved.step||0)));
  saveGuide({step,started:true,hidden:false,done:false});
  const current=s().tasks.find(t=>t.priority&&t.date===dayKey()&&!t.archived&&t.status!=='done');
- const rabbit=s().preferences.showCompanion===false?'':pip(step===0?'welcome':step===1?'focus':'rest');
- const intro=`<div class="guide-lead">${rabbit}<small class="${step===0&&rabbit?'pip-note':''}">First-day guide · ${step+1} of 4</small></div>`;
- const links=(step?b('Back','guide-back'):'')+b('Pause guide','guide-pause');
- const next=()=>{openGuide(step+1);return 'next-form';};
+ const intro='<div class="guide-lead">'+(s().preferences.showCompanion===false?'':pip(step?'listen':'welcome'))+'<small>Pip’s first-day guide · '+(step+1)+' of 2</small></div>';
  if(step===0){
-  if(current){
-   form(guideTitles[step],intro+'<p>Your priority for today</p><strong>'+e(current.title)+'</strong>',next,'Continue',links);
-  }else{
-   form(guideTitles[step],intro+'<p>What would make today feel worthwhile? Pick something you can start today.</p>'+field('Priority','title',saved.title||'','text',required)+field('First small step','firstStep',saved.firstStep||'','text','maxlength="500" placeholder="Open the document and write a heading"')+(s().goals.length?goalSelect(s(),saved.goalId):''),async data=>{
-    await guarded('task.save',{...data,date:dayKey(),primary:true});
-    saveGuide({title:'',firstStep:'',goalId:''});
-    return next();
-   },'Save priority and continue',links+b('Explore without a task','guide-next'));
-   dialog.querySelector('form').oninput=ev=>saveGuide(Object.fromEntries(new FormData(ev.currentTarget)));
-  }
- }else if(step===1){
-  const detail=current?.firstStep||current?.title||'Choose one small action you can do now.';
-  form(guideTitles[step],intro+'<p>On Today, select <strong>Start</strong> to work on your first step. You can open the focus timer or work at your own pace.</p><div class="guide-example"><small>Focus preview</small><strong>'+e(detail)+'</strong>'+b('Preview timer','guide-preview')+'</div>',next,'Continue',links);
- }else if(step===2){
-  form(guideTitles[step],intro+'<p>Completing a task adds it to <strong>Journal</strong>. Choose <strong>Write an entry</strong> to remember a lesson or a win.</p><div class="guide-example"><small>Reflection prompt</small><strong>What made today easier?</strong></div><p>Use <strong>Review</strong> to revisit the week. In <strong>Plan</strong> you can schedule tomorrow, and in <strong>Goals</strong> you can connect tasks to a longer-term outcome.</p>',next,'Continue',links);
+  const fields=current?'<p>Your priority for today</p><strong>'+e(current.title)+'</strong>':
+    field('Priority','title',saved.title||'','text',required+' placeholder="e.g. Call Maya about Friday"');
+  form('What matters today?',intro+fields,async data=>{
+   if(!current){await guarded('task.save',{title:data.title,firstStep:saved.firstStep||'',goalId:saved.goalId||'',date:dayKey(),primary:true});saveGuide({title:'',firstStep:'',goalId:''});}
+   openGuide(1);return 'next-form';
+  },current?'Continue':'Set my priority',b('Skip for now','guide-skip','','quiet')+b('Pause guide','guide-pause','','quiet'));
+  dialog.querySelector('form').oninput=ev=>saveGuide({title:ev.currentTarget.elements.title.value});
  }else{
-  const storage=account()?'Your workspace uses Google sync. You can check its status in Settings.':'Tasks and journal entries save in this browser. Choose Google sync to use them on another device.';
-  form(guideTitles[step],intro+'<p>'+storage+'</p>',()=>{
-   localStorage.setItem(guideKey(),JSON.stringify({done:true,hidden:true}));render();
-  },account()?'Finish guide':'Finish on this device',links+(!account()&&configured()?b('Set up Google sync','cloud-connect'):''));
+  const prompt=current?'<small>First step</small><strong>'+e(current.firstStep||current.title)+'</strong>':'<strong>Start with one small task when you’re ready.</strong>';
+  form('Your day is ready',intro+'<div class="guide-example">'+prompt+'</div><p>You can add another task now, or head to Today.</p>'+field('Another task (optional)','extra',saved.extra||'','text','maxlength="180"'),async data=>{
+   if(data.extra?.trim())await guarded('task.save',{title:data.extra.trim(),date:dayKey()});
+   saveGuide({done:true,hidden:true,extra:''});render();
+  },'Start my day',b('Back','guide-back','','quiet')+b('Pause guide','guide-pause','','quiet'));
+  dialog.querySelector('form').oninput=ev=>saveGuide({extra:ev.currentTarget.elements.extra.value});
  }
  render();
 }
@@ -138,30 +160,34 @@ function noteForm(id,kind='entry'){const n=s().notes.find(x=>x.id===id)||{};cons
  async data=>{await guarded('note.save',{...data,id});localStorage.removeItem(key);},'Save entry',id?b('Delete entry','delete-note',id):'');
  dialog.querySelector('form').oninput=ev=>{try{localStorage.setItem(key,JSON.stringify(Object.fromEntries(new FormData(ev.currentTarget))));}catch{dialog.querySelector('[role=alert]').textContent='Draft recovery unavailable. Save this entry before leaving.';}};}
 function download(){const blob=new Blob([JSON.stringify({format:'daymark-workspace',schemaVersion:1,exportedAt:new Date().toISOString(),payload:JSON.parse(exportWorkspace())},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='daymark-'+dayKey()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function clearDrafts(){for(const k of Object.keys(localStorage))if(k.startsWith(draftPrefix()))localStorage.removeItem(k);}
+function clearDrafts(){for(const k of Object.keys(localStorage))if(k.startsWith(draftPrefix()))localStorage.removeItem(k);for(const key of new Set([...quickDrafts.keys(),...Object.keys(sessionStorage)]))if(key.startsWith(draftPrefix()+'quick-task:'))writeQuickDraft(key,'');}
 function settings(){const p=s().preferences;
- form('Settings',appearanceSettings()+select('Coach','coach',choices(['off','gentle','direct']),p.coach||'gentle')+
- '<label class="companion-setting"><input type="checkbox" name="showCompanion" '+(p.showCompanion===false?'':'checked')+'> Show the rabbit companion</label>'+select('Show tomorrow shortcut','showTomorrow',choices(['Yes','No']),p.showTomorrow?'Yes':'No')+select('Show routines on Today','showRoutines',choices(['Yes','No']),p.showRoutines?'Yes':'No')+
+ const options=['off','gentle','direct'].map(value=>`<label><input type="radio" name="coach" value="${value}" ${(p.coach||'gentle')===value?'checked':''}>${value[0].toUpperCase()+value.slice(1)}</label>`).join('');
+ const toggle=(name,label,checked)=>`<label class="preference-toggle">${label}<input type="checkbox" name="${name}" ${checked?'checked':''}></label>`;
+ form('Settings',appearanceSettings()+'<fieldset class="appearance-group"><legend>Coach</legend>'+options+'</fieldset>'+
+ toggle('showCompanion','Show the rabbit companion',p.showCompanion!==false)+toggle('showTomorrow','Show tomorrow shortcut',p.showTomorrow)+toggle('showRoutines','Show routines on Today',p.showRoutines)+
  '<details><summary>In-app reminders</summary><p>Leave the time blank to turn a reminder off. Reminders appear while Daymark is open.</p>'+field('Preparation','prepTime',p.prepTime,'time')+field('Morning','morningTime',p.morningTime,'time')+field('Quiet hours start','quietStart',p.quietStart||'22:00','time')+field('Quiet hours end','quietEnd',p.quietEnd||'07:00','time')+'</details>',
- data=>guarded('preferences',{...data,showCompanion:data.showCompanion==='on',showTomorrow:data.showTomorrow==='Yes',showRoutines:data.showRoutines==='Yes'}),'Save settings',
- '<hr><section data-sync-panel>'+storagePanel()+'</section>'+b('First-day guide','guide-open')+'<details><summary>File transfer and deletion</summary>'+b('Download backup','export')+'<label class="field">Restore a backup<input type="file" id="restore-file" accept=".json,application/json"></label>'+b('Delete workspace','wipe')+'</details>');}
+ data=>guarded('preferences',{...data,showCompanion:data.showCompanion==='on',showTomorrow:data.showTomorrow==='on',showRoutines:data.showRoutines==='on'}),'Save settings',
+ '<hr>'+b('First-day guide','guide-open')+'<details><summary>File transfer and deletion</summary>'+b('Download backup','export')+'<label class="field">Restore a backup<input type="file" id="restore-file" accept=".json,application/json"></label>'+b('Delete workspace','wipe')+'</details>');}
 function routines(id){const r=s().routines.find(r=>r.id===id)||{};
  form(id?'Edit routine':'New routine',field('Routine','title',r.title,'text',required)+select('Measure','kind',choices(['count','minutes','check']),r.kind)+select('Frequency','period',choices(['daily','weekly']),r.period)+field('Target per period','target',r.target||1,'number','required min="1"')+field('Standard amount','step',r.step||1,'number','required min="1"')+field('Minimum version','minimum',r.minimum)+field('Unit','unit',r.unit||'times')+field('Cue','cue',r.cue)+`<fieldset><legend>Scheduled weekdays (optional)</legend>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((d,i)=>`<label><input type="checkbox" name="w${i}" ${r.weekdays?.includes(i)?'checked':''}>${d}</label>`).join('')}</fieldset>`+goalSelect(s(),r.goalId),data=>guarded('routine.save',{...data,id,weekdays:[0,1,2,3,4,5,6].filter(i=>data['w'+i])}),'Save routine',id?b(r.paused?'Resume routine':'Pause routine','routine-pause',id):'');}
 async function act(action,id){
  switch(action){
- case 'appearance-mode':return form('Appearance mode',appearanceGroup('theme','Color mode'),null);
+ case 'appearance-mode':return toggleMode(root.querySelector('.mode-toggle'));
  case 'appearance-reset':setAppearance('reset');return;
- case 'greet-pip':gesture('greet',dialog.open?dialog:root);return;
- case 'guide-open':return openGuide();
- case 'guide-back':return openGuide(guideState().step-1);
- case 'guide-next':return openGuide(guideState().step+1);
- case 'guide-pause':close(true);return render();
- case 'guide-hide':saveGuide({hidden:true});return render();
- case 'guide-preview':{
-  const preview=dialog.querySelector('.guide-example');
-  if(preview){preview.innerHTML='<small>Focus preview</small><strong>25:00</strong><p>During a real session you can pause or finish whenever you like.</p>';preview.setAttribute('role','status');}
+ case 'greet-pip':{
+  const scope=dialog.open?dialog:root;
+  gesture('greet',scope);
+  const help=scope.querySelector('.pip-help');
+  if(help){help.hidden=!help.hidden;scope.querySelector('.pip').setAttribute('aria-expanded',String(!help.hidden));}
+  else if(dialog.open)dialog.querySelector('input:not([type=hidden]),textarea')?.focus({preventScroll:true});
   return;
  }
+ case 'guide-open':return openGuide();
+ case 'guide-back':return openGuide(guideState().step-1);
+ case 'guide-skip':saveGuide({hidden:true,done:true});close(true);return render();
+ case 'guide-pause':close(true);return render();
+ case 'guide-hide':saveGuide({hidden:true});return render();
  case 'menu':drawer.querySelector('nav').innerHTML=navigationLinks(page());drawer.showModal();return;
  case 'close':return close();case 'today':case 'tomorrow':offset=Number(action==='tomorrow');return render();
  case 'new':case 'dated':case 'edit':case 'new-primary':return taskForm(id,action==='dated'||action==='new-primary'?day():'',action==='new-primary');
@@ -200,6 +226,7 @@ async function act(action,id){
  case 'cloud-connect':return form('Use Google sync','<p>Your saved workspace will be private to your Google sign-in. Offline changes sync when Daymark reconnects. Unfinished journal drafts stay on this device.</p><label><input type="checkbox" name="copy"> Copy this device’s saved records if my Google workspace is new</label>',data=>connect(data.copy==='on'),'Sign in with Google');
  case 'device-only':return form('Switch to device only?','<p>Your separate device workspace will open. Cloud records remain in your account. Any pending changes stay on this browser until you sign back into the same account.</p>',disconnect,'Sign out');
  case 'cloud-conflict':return form('Choose a workspace version','<p>The same records changed on two devices. Both versions are still available. This choice applies to the whole workspace. You can download the device version first.</p>'+b('Download device version','export')+select('Version to keep','choice',[['cloud','Use the Google version'],['device','Use this device’s version']]),data=>resolveConflict(data.choice),'Use selected version');
+ case 'account':return form('Account','<section data-sync-panel>'+storagePanel()+'</section>',null);
  case 'settings':return settings();case 'export':return download();
  case 'wipe':return form('Permanently delete workspace?',(account()?'<p>Erase this account’s workspace on this device and sync the deletion to Google and your other devices. Downloaded copies remain yours.</p>':'<p>All records and drafts in this device workspace will be removed.</p>')+b('Download backup first','export'),async()=>{await replaceWorkspace(emptyState(),revision);clearDrafts();},'Delete all local data');
  default:return;
@@ -207,15 +234,17 @@ async function act(action,id){
 }
 function taskFormForDay(id){taskForm(id,day(),true);dialog.querySelector('[name=date]').value=day();}
 document.addEventListener('click',async ev=>{const target=ev.target.closest('[data-action]');if(!target||saving)return;if(dialog.open&&formDirty&&!['close','greet-pip','appearance-reset'].includes(target.dataset.action)){if(!confirm('Discard unsaved changes before continuing?'))return;formDirty=false;}saving=true;try{await act(target.dataset.action,target.dataset.id||'');}catch(err){if(dialog.open)dialog.querySelector('[role=alert]').textContent=err.message;else flash(err.message);}finally{saving=false;}});
+root.addEventListener('input',ev=>{if(ev.target.matches('.quick-task input')){writeQuickDraft(ev.target.dataset.scope,ev.target.value);if(ev.target.value.length===1)gesture('listen');}});
 root.addEventListener('submit',async ev=>{
  if(!ev.target.matches('.quick-task'))return;
  ev.preventDefault();if(saving)return;
  const input=ev.target.elements.title,title=input.value.trim();if(!title){input.focus();return;}
  saving=true;
+ const submittedScope=input.dataset.scope,submittedValue=input.value;
  try{
   const next=await cmd('task.save',{title,date:day()});
   rememberCue(next.tasks.at(-1).id);render();const field=root.querySelector('.quick-task input');
-  if(field){field.value='';field.focus({preventScroll:true});}gesture('listen');flash('Task added');
+  if(readQuickDraft(submittedScope)===submittedValue){writeQuickDraft(submittedScope,'');if(field?.dataset.scope===submittedScope){field.value='';field.focus({preventScroll:true});}}gesture('listen');flash('Task added');
  }catch(err){flash(err.message);}finally{saving=false;}
 });
 document.addEventListener('change',async ev=>{const el=ev.target;if(el.dataset.appearance){try{setAppearance(el.dataset.appearance,el.value);}catch{applyAppearance();flash('Could not save the appearance on this device.');}return;}if(el.dataset.date&&el.value){if(el.dataset.date==='plan')planDay=el.value;else reviewDay=el.value;render();}if(el.hasAttribute('data-period')){period=el.value;render();}
@@ -229,5 +258,5 @@ async function tick(){const today=dayKey();if(lastDay!==today){lastDay=today;if(
  const logs=p.reminderDays||[],recent=logs.filter(n=>dayKey(new Date(n))===today);if(recent.length>=2||logs.some(n=>+now-n<14400000))return;
  try{await guardedReminder([...recent,+now]);flash(hm===p.prepTime?'Time to prepare tomorrow’s plan.':'Your daily plan is ready to review.');}catch{}}
 function guardedReminder(reminderDays){return cmd('preferences',{reminderDays,expectedRevision:s().revision});}
-try{await openStore(await initializeAccount());subscribe(render);render();startSync();setInterval(tick,1000);if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>flash('Offline loading is unavailable in this browser.'));}catch(err){root.innerHTML='<main><h1>Workspace unavailable</h1><p>'+e(err.message)+'</p><a href="">Try again</a></main>';}
+try{await openStore(await initializeAccount());subscribe(render);render();if(page()==='Today'&&!account()&&!s().revision&&!Object.keys(guideState()).length)openGuide(0);startSync();setInterval(tick,1000);if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).catch(()=>flash('Offline loading is unavailable in this browser.'));}catch(err){root.innerHTML='<main><h1>Workspace unavailable</h1><p>'+e(err.message)+'</p><a href="">Try again</a></main>';}
 

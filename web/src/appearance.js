@@ -1,4 +1,4 @@
-import {esc, button} from './ui.js';
+import {esc, button, icon} from './ui.js';
 
 const palettes = {
 'Garnet':[['#F7F5F3','#FFFFFF','#251F22','#675E63','#782944','#FFFFFF','#F1E8EB','#DAD3D5','#897D83'],['#191619','#252124','#EEE8EA','#BAADB4','#E3A0B5','#29141C','#32252B','#42383E','#8B7C84']],
@@ -41,6 +41,13 @@ export function applyAppearance(legacyTheme) {
   roles.forEach((role,i) => html.style.setProperty('--'+role, colors[i]));
   html.style.colorScheme = dark ? 'dark' : 'light';
   html.dataset.theme = current.theme;
+  const toggle=document.querySelector('.mode-toggle');
+  if(toggle){
+    const label=dark?'Switch to light mode':'Switch to dark mode';
+    toggle.setAttribute('aria-label',label);
+    toggle.title=label;
+    toggle.innerHTML=icon(dark?'sun':'moon');
+  }
   html.dataset.font = current.font;
   html.dataset.text = current.text;
   html.dataset.space = current.space;
@@ -63,6 +70,31 @@ export function setAppearance(key, value) {
   applyAppearance();
 }
 
+let activeReveal;
+export async function toggleMode(button) {
+  if(activeReveal)await activeReveal.updateCallbackDone;
+  activeReveal?.skipTransition();
+  const next=document.documentElement.style.colorScheme==='dark'?'light':'dark';
+  const change=()=>setAppearance('theme',next);
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches){change();return;}
+  const box=button.getBoundingClientRect(), x=box.left+box.width/2, y=box.top+box.height/2;
+  if(!document.startViewTransition){
+    change();
+    button.animate([{boxShadow:'0 0 0 0 var(--brand)'},{boxShadow:'0 0 0 18px transparent'}],{duration:360,easing:'ease-out'});
+    return;
+  }
+  const radius=Math.ceil(Math.hypot(Math.max(x,innerWidth-x),Math.max(y,innerHeight-y)));
+  const transition=document.startViewTransition(change);
+  activeReveal=transition;
+  try {
+    await transition.ready;
+    document.documentElement.animate(
+      {clipPath:[`circle(0px at ${x}px ${y}px)`,`circle(${radius}px at ${x}px ${y}px)`]},
+      {duration:470,easing:'cubic-bezier(.2,.8,.25,1)',pseudoElement:'::view-transition-new(root)'}
+    );
+  } catch { /* A second click or hidden tab can skip the reveal. */ }
+  transition.finished.finally(()=>{if(activeReveal===transition)activeReveal=null;});
+}
 export function appearanceGroup(key, legend) {
   const radios = choices[key].map(value => {
     const name = value[0].toUpperCase()+value.slice(1);

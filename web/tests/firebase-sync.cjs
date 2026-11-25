@@ -28,16 +28,16 @@ const run=Date.now();
   await c.route(origin+'/',async route=>{const res=await route.fetch();await route.fulfill({response:res,headers:{...res.headers(),'content-security-policy':"default-src 'self'; connect-src 'self' http://127.0.0.1:9099 http://127.0.0.1:8787; style-src 'self' 'unsafe-inline'"}});});
   const p=await c.newPage();p.on('console', m=>{if(m.type()==='error') console.error('Emulator browser:',m.text().replace(/key=[^ '&]+/g,'key=demo').slice(0,900));});p.setDefaultTimeout(45000);p.on('requestfailed',r=>console.warn('Test request:',new URL(r.url()).origin,r.failure()?.errorText));await p.goto(origin);
   const press=name=>p.getByRole('button',{name,exact:true}).click();
+  await press('Skip for now');
   if(seed){
    await capture(p,'Existing device task');
-   await press('Settings');await press('First-day guide');await press('Explore without a task');
-   await press('Continue');await press('Continue');await press('Set up Google sync');
+   await press('Account');await press('Continue with Google');
    await p.evaluate(()=>window.cancelTestConsent=true);await press('Sign in with Google');
    await p.getByRole('alert').filter({hasText:'Google sign-in cancelled'}).waitFor();
    await p.evaluate(()=>window.cancelTestConsent=false);await press('Close');
-   await press('Resume first-day guide');await press('Set up Google sync');
+   await press('Account');await press('Continue with Google');
   }else{
-   await press('Settings');await press('Continue with Google');
+   await press('Account');await press('Continue with Google');
   }
   if(seed)await p.getByRole('checkbox').check();await p.getByRole('button',{name:'Sign in with Google'}).click();
   try { await p.locator('[data-cloud-status]').filter({hasText:'Synced with Google'}).waitFor(); }
@@ -63,7 +63,7 @@ const run=Date.now();
    assert.equal((await fetch(target)).status,403);
    assert.equal((await fetch(target,{method:'DELETE',headers:{Authorization:'Bearer '+bobToken}})).status,403);
  }
- await a.getByRole('button',{name:'Settings',exact:true}).click();await a.getByRole('button',{name:'Switch to device only'}).click();await a.getByRole('button',{name:'Sign out',exact:true}).click();await a.locator('[data-cloud-status]').filter({hasText:'Device only'}).waitFor();assert.deepEqual(await a.evaluate(async()=>(await import('./src/store.js')).snapshot().tasks.map(t=>t.title)),['Existing device task']);
+ await a.getByRole('button',{name:'Account',exact:true}).click();await a.getByRole('button',{name:'Switch to device only'}).click();await a.getByRole('button',{name:'Sign out',exact:true}).click();await a.locator('[data-cloud-status]').filter({hasText:'Device only'}).waitFor();assert.deepEqual(await a.evaluate(async()=>(await import('./src/store.js')).snapshot().tasks.map(t=>t.title)),['Existing device task']);
  console.log('PASS: cross-device sync, offline reconciliation, account isolation, anonymous and other-account denials, and sign-out.');
  }finally{await browser?.close();server.kill();}
 })().catch(err=>{console.error(err);process.exitCode=1;});
