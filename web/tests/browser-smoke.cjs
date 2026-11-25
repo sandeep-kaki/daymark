@@ -71,7 +71,7 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  await press('Set my priority');await guide.getByRole('heading',{name:'Your day is ready'}).waitFor();
  await press('Back');await guide.getByRole('dialog').getByText('Prepare a lesson',{exact:true}).waitFor();
  await press('Continue');await guide.getByLabel('Another task (optional)').fill('Choose an example');
- await press('Start my day');await guide.reload();
+ await press('Start my day');await guide.locator('#dialog').waitFor({state:'hidden'});await guide.reload();
  await guide.getByRole('heading',{name:'Prepare a lesson',exact:true}).waitFor();
  assert.equal(await guide.getByRole('button',{name:'Resume first-day guide'}).count(),0);
  await press('Settings');await press('First-day guide');await guide.getByRole('heading',{name:'What matters today?'}).waitFor();
@@ -90,7 +90,7 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  await appearancePage.reload();assert.equal(await input.inputValue(),'Today draft');
  await input.focus();assert.equal(await input.evaluate(el=>getComputedStyle(el).outlineStyle),'none');
  assert.notEqual(await appearancePage.locator('.quick-task').evaluate(el=>getComputedStyle(el).borderColor),'transparent');
- await input.fill('Call Maya about Friday');await input.press('Enter');
+ await input.fill('Call Maya about Friday');await input.press('Enter');await appearancePage.waitForFunction(()=>document.querySelector('.quick-task input')?.value==='');
  await appearancePage.getByText('Open the contact details for Maya.',{exact:true}).waitFor();
  assert.equal(await input.inputValue(),'');await tap('Tomorrow');assert.equal(await input.inputValue(),'Tomorrow draft');await tap('Today');
  assert.equal(await appearancePage.locator('.pip').count(),1);
@@ -139,5 +139,12 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  console.log('PASS responsive checks at 320 and 1280 px in both themes; stale cross-tab form retains input.');
  console.log('PASS Chromium '+browser.version()+': capture, goal, milestone, priority, start, partial, completion/undo, retrospective work, draft recovery, review, five offline destinations, portable restore into clean profile.');
  }finally{if(browser)await browser.close();server?.kill();}
-})().catch(e=>{console.error(e);process.exitCode=1;});
+})().catch(error=>{
+ console.error(error);
+ if(process.env.GITHUB_ACTIONS){
+  const details=String(error.stack||error).slice(0,2500).replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A');
+  console.error('::error title=Daymark browser check::'+details);
+ }
+ process.exitCode=1;
+});
 
