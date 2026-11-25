@@ -8,7 +8,21 @@ export function navigationLinks(page){
 }
 export function shell(page,body){
  const nextMode=document.documentElement.style.colorScheme==='dark'?'light':'dark';
- return `<main><header><div class="masthead"><button type="button" class="menu-button quiet" data-action="menu" aria-label="Open navigation" aria-haspopup="dialog" aria-controls="navigation">${icon('menu')}</button><a class="wordmark" href="#Today">Daymark</a><span class="current-page">${e(page)}</span></div><div class="account-tools"><button class="quiet account-button" type="button" data-action="account" aria-label="Account" title="Account and sync">${icon('account')}<span class="account-label">Account</span><small data-cloud-status></small></button><button class="quiet mode-toggle" type="button" data-action="appearance-mode" aria-label="Switch to ${nextMode} mode" title="Switch to ${nextMode} mode">${icon(nextMode==='dark'?'moon':'sun')}</button>${b('Settings','settings','','quiet','settings')}</div></header><article>${body}</article></main><nav class="mobile" aria-label="Destinations">${navigationLinks(page)}</nav>`;
+ return `<main>
+  <header>
+   <div class="masthead">
+    <button type="button" class="menu-button quiet" data-action="menu" aria-label="Open navigation" aria-haspopup="dialog" aria-controls="navigation">${icon('menu')}</button>
+    <span class="wordmark">Daymark</span><span class="current-page">${e(page)}</span>
+    <nav class="desktop-nav" aria-label="Destinations">${navigationLinks(page)}</nav>
+   </div>
+   <div class="account-tools">
+    <button class="quiet account-button" type="button" data-action="account" aria-label="Account" title="Account and sync">${icon('account')}<span class="account-label">Account</span><small data-cloud-status></small></button>
+    <button class="quiet mode-toggle" type="button" data-action="appearance-mode" aria-label="Switch to ${nextMode} mode" title="Switch to ${nextMode} mode">${icon(nextMode==='dark'?'moon':'sun')}</button>
+    <button class="quiet" type="button" data-action="settings" aria-label="Settings">${icon('settings')}<span class="settings-label">Settings</span></button>
+   </div>
+  </header>
+  <article>${body}</article>
+ </main>`;
 }
 const title=(label,heading,actions='')=>`<section class="heading"><div><small>${e(label)}</small><h1>${e(heading)}</h1></div><div class="actions">${actions}</div></section>`;
 const section=(name,body,action='')=>`<section class="panel"><div class="line"><h2>${e(name)}</h2>${action}</div>${body}</section>`;

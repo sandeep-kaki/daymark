@@ -43,7 +43,22 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
   await p.setViewportSize({width,height:850});await p.emulateMedia({colorScheme:theme});
   for(const name of ['Today','Plan','Goals','Journal','Review']){await route(name);const fits=await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth);assert(fits,name+' overflows '+width+' '+theme);}
  }
- await route('Today');
+ assert.equal(await p.locator('header nav:visible a').count(),5);
+ assert.equal(await btn('Open navigation').isVisible(),false);
+ await route('Goals');
+ const wordmark=p.locator('.wordmark');
+ assert.equal(await wordmark.evaluate(el=>el.closest('a,button,[tabindex]')),null);
+ await wordmark.dblclick();
+ assert.equal(await p.evaluate(()=>getSelection().toString()),'');
+ assert.equal(new URL(p.url()).hash,'#Goals');
+ const desktopToday=p.locator('.desktop-nav a[href="#Today"]');
+ await desktopToday.focus();await p.keyboard.press('Enter');
+ await p.waitForFunction(()=>document.activeElement?.matches('.desktop-nav [aria-current][href="#Today"]'));
+ await p.setViewportSize({width:1023,height:850});await btn('Open navigation').click();
+ await p.setViewportSize({width:1024,height:850});
+ await p.locator('#navigation').waitFor({state:'hidden'});
+ await p.waitForFunction(()=>document.activeElement?.matches('.desktop-nav [aria-current]'));
+ await p.setViewportSize({width:768,height:850});
  await btn('Open navigation').click();await p.keyboard.press('Escape');
  await p.waitForFunction(()=>document.activeElement?.dataset.action==='menu');
  await btn('Settings').click();await p.getByRole('radio',{name:'Dark',exact:true}).check();
@@ -87,7 +102,9 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  const input=appearancePage.getByLabel('New task for this day');
  await input.fill('Today draft');await tap('Tomorrow');assert.equal(await input.inputValue(),'');
  await input.fill('Tomorrow draft');await tap('Today');assert.equal(await input.inputValue(),'Today draft');
- await appearancePage.locator('nav:visible a[href="#Goals"]').click();await appearancePage.locator('nav a[aria-current].sliding[href="#Goals"]').waitFor();await appearancePage.locator('nav:visible a[href="#Today"]').click();await input.waitFor();
+ await tap('Open navigation');await appearancePage.locator('#navigation a[href="#Goals"]').click();
+ await appearancePage.locator('#navigation').waitFor({state:'hidden'});await tap('Open navigation');
+ await appearancePage.locator('#navigation a[href="#Today"]').click();await appearancePage.locator('#navigation').waitFor({state:'hidden'});await input.waitFor();
  await appearancePage.reload();assert.equal(await input.inputValue(),'Today draft');
  await input.focus();assert.equal(await input.evaluate(el=>getComputedStyle(el).outlineStyle),'none');
  assert.notEqual(await appearancePage.locator('.quick-task').evaluate(el=>getComputedStyle(el).borderColor),'transparent');
