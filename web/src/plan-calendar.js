@@ -33,7 +33,6 @@ export function installPlanCalendar(onSelect){
    days.append(button);
   }
   grid.replaceChildren(days);
-  position();
   if(focusDay)grid.querySelector('[tabindex="0"]').focus({preventScroll:true});
  }
  function position(){

@@ -29,7 +29,22 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  await p.getByRole('link',{name:'Open plan',exact:true}).click();
  const picker=p.locator('[data-plan-picker]'),calendar=p.locator('#plan-calendar');
  await picker.click();const initial=await picker.getAttribute('data-plan-picker');
- await btn('Next month').click();await p.keyboard.press('Escape');
+ const nextMonth=btn('Next month'),previousMonth=btn('Previous month');
+ const panelBox=await calendar.boundingBox(),monthRows=new Set();
+ for(const arrow of [nextMonth,previousMonth]){
+  const point=await arrow.boundingBox();
+  const x=point.x+point.width/2,y=point.y+point.height/2;
+  for(let turn=0;turn<12;turn++){
+   const before=await calendar.locator('h2').textContent();
+   await p.mouse.click(x,y);
+   assert.notEqual(await calendar.locator('h2').textContent(),before);
+   monthRows.add(await calendar.locator('[data-day]').count()/7);
+   assert.deepEqual(await arrow.boundingBox(),point);
+   assert.deepEqual(await calendar.boundingBox(),panelBox);
+  }
+ }
+ assert(monthRows.has(5)&&monthRows.has(6));
+ await p.keyboard.press('Escape');
  assert.equal(await picker.getAttribute('data-plan-picker'),initial);
  await picker.click();await p.keyboard.press('PageDown');await p.keyboard.press('ArrowRight');
  const chosen=await p.locator(':focus').getAttribute('data-day');assert(chosen&&chosen!==initial);
@@ -115,6 +130,11 @@ const {spawn}=require('node:child_process');const assert=require('node:assert/st
  await input.fill('Tomorrow draft');await tap('Today');assert.equal(await input.inputValue(),'Today draft');
  const phoneTabs=appearancePage.locator('.phone-tabs');
  assert.equal(await phoneTabs.getByRole('link').count(),5);
+ for(const name of ['Goals','Today']){
+  const link=phoneTabs.getByRole('link',{name,exact:true});
+  await link.hover();
+  assert.deepEqual(await link.evaluate(el=>[getComputedStyle(el).boxShadow,getComputedStyle(el).filter]),['none','none']);
+ }
  // Sample the actual lens between tabs before the transition can finish on a fast runner.
  await appearancePage.evaluate(()=>{
   window.addEventListener('hashchange',()=>{

@@ -78,9 +78,10 @@ button.primary,.priority button.primary { background: var(--brand); color: var(-
 .calendar-top,.calendar-month { display:flex;align-items:center;gap:4px; }
 .calendar-top { justify-content:space-between;padding-left:.55rem;color:var(--dim);font-size:.84rem; }
 .calendar-month { padding-left:.55rem;margin-bottom:.6rem; }
-.calendar-month h2 { flex:1;margin:0;font:500 1.32rem/1.2 var(--heading); }
+.calendar-month h2 { flex:1;min-width:0;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:500 1.32rem/1.2 var(--heading); }
 #plan-calendar .quiet { width:44px;padding:0;border-radius:50%; }
 .calendar-week,.calendar-days { display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center; }
+.calendar-days { grid-template-rows:repeat(6,minmax(42px,1fr)); }
 .calendar-week { padding-block:.3rem;font-size:.78rem;color:var(--dim); }
 .calendar-days button { position:relative;min-width:0;min-height:42px;padding:0;background:transparent;border:0;font-variant-numeric:tabular-nums; }
 .calendar-days .outside-month { color:var(--dim);font-weight:400; }
@@ -272,7 +273,7 @@ header,#navigation .line { -webkit-user-select:none;user-select:none; }
  --control-halo:0 0 0 1px color-mix(in srgb,var(--halo-color) 24%,transparent),0 0 9px 1px color-mix(in srgb,var(--halo-color) 13%,transparent);
 }
 @media (hover:hover) and (pointer:fine) {
- :is(button:enabled,a[href],summary,select:enabled,textarea:enabled,input:enabled):hover,
+ :is(button:enabled,a[href]:not(:where(nav a)),summary,select:enabled,textarea:enabled,input:enabled):hover,
  .appearance-group label:hover,.quick-task:has(input:hover) { box-shadow:var(--control-halo); }
  .quick-task input:hover,.appearance-group input:hover { box-shadow:none; }
  .appearance-group label:has(:checked):hover { box-shadow:inset 0 0 0 1px var(--brand),var(--control-halo); }
